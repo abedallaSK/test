@@ -4,14 +4,14 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Activity Bot — Settings</title>
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=5" />
   </head>
   <body>
     <header class="topbar">
       <div class="brand">
         <span class="logo">🥋</span>
         <div>
-          <h1>Activity Bot</h1>
+          <h1>Activity Bot <span class="build" id="build-tag" title="Version reported by the running server">server: …</span></h1>
           <p class="sub">Dummy Activities &amp; members (in Israel 🇮🇱) + Expo push notifications</p>
         </div>
       </div>
@@ -40,6 +40,7 @@
 
     <nav id="tabs" class="tabs">
       <button type="button" class="tab active" data-tab="activities">🥋 Activity generator</button>
+      <button type="button" class="tab" data-tab="events">📅 Events</button>
       <button type="button" class="tab" data-tab="notify">🔔 Push notifications</button>
     </nav>
 
@@ -140,6 +141,9 @@
           </label>
         </div>
         <div class="toggles">
+          <label class="switch" title="Create activities on each run. Turn off to generate only events.">
+            <input type="checkbox" id="activitiesEnabled" /><span class="track"></span><span class="switch-label">Create activities</span>
+          </label>
           <label class="switch" title="When the timer elapses, flip the activity to ended.">
             <input type="checkbox" id="autoEnd" /><span class="track"></span><span class="switch-label">Auto-end after timer</span>
           </label>
@@ -161,6 +165,87 @@
         </div>
         <p class="hint">Pick who can appear as hosts and members. Each run chooses randomly from this pool.</p>
         <div id="users" class="users"><span class="loading">Loading users…</span></div>
+      </section>
+    </main>
+
+    <!-- ============ EVENTS TAB ============ -->
+    <main id="panel-events" class="hidden">
+      <section class="card summary">
+        <div class="summary-grid">
+          <div class="stat"><span class="stat-label">Events</span><span class="stat-value" id="esum-state">—</span></div>
+          <div class="stat"><span class="stat-label">Per run</span><span class="stat-value" id="esum-count">—</span></div>
+          <div class="stat"><span class="stat-label">isEvent = true</span><span class="stat-value" id="esum-ratio">—</span></div>
+          <div class="stat"><span class="stat-label">Start window</span><span class="stat-value" id="esum-window">—</span></div>
+          <div class="stat"><span class="stat-label">Photo</span><span class="stat-value" id="esum-photo">—</span></div>
+          <div class="stat"><span class="stat-label">Users in pool</span><span class="stat-value" id="esum-pool">—</span></div>
+        </div>
+      </section>
+
+      <section class="card info">
+        <div class="info-body">
+          <p>Events are created in the <b>same run</b> as activities (same schedule &amp; user pool).
+          Each event gets a random <b>owner</b> from your selected pool, a <b>future start time</b>,
+          a <b>location string in Israel</b> 🇮🇱, a random title &amp; description, and — for events —
+          an uploaded <b>photo</b>. <code>POST /api/events</code> (and <code>POST /api/upload</code> for photos).</p>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>📅 Event generation</h2>
+          <label class="switch big" title="Create events on each scheduled run.">
+            <input type="checkbox" id="eventsEnabled" /><span class="track"></span><span class="switch-label">Create events</span>
+          </label>
+        </div>
+        <div class="grid">
+          <label>Min events per run
+            <input type="number" id="minEvents" min="0" value="1" />
+            <small>Fewest events created each run.</small>
+          </label>
+          <label>Max events per run
+            <input type="number" id="maxEvents" min="0" value="2" />
+            <small>Most events created each run.</small>
+          </label>
+          <label>“isEvent = true” ratio (%)
+            <input type="number" id="eventIsEventRatio" min="0" max="100" value="100" />
+            <small>⚠ Keep at 100 for real events. Records with <code>isEvent: false</code> show up
+            as <b>activities</b> in the Dojo app.</small>
+          </label>
+          <label>Event duration (minutes)
+            <input type="number" id="eventDurationMinutes" min="1" value="120" />
+            <small>Sets <code>endTime</code> = start + duration.</small>
+          </label>
+          <label>Start — min days ahead
+            <input type="number" id="eventFutureMinDays" min="0" value="1" />
+            <small>Earliest the start time can be (from now).</small>
+          </label>
+          <label>Start — max days ahead
+            <input type="number" id="eventFutureMaxDays" min="0" value="30" />
+            <small>Latest the start time can be (from now).</small>
+          </label>
+        </div>
+        <div class="toggles">
+          <label class="switch" title="Upload a placeholder photo and attach it to events with isEvent=true.">
+            <input type="checkbox" id="eventAttachPhoto" /><span class="track"></span><span class="switch-label">Attach photo (upload)</span>
+          </label>
+          <label class="switch" title="Link each event to a random dojo.">
+            <input type="checkbox" id="eventAttachDojo" /><span class="track"></span><span class="switch-label">Attach a random dojo</span>
+          </label>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>✍️ Titles &amp; descriptions</h2>
+        <div class="grid">
+          <label>Event titles (one per line)
+            <textarea id="eventTitles" rows="6" placeholder="Sunrise Yoga Session&#10;Community Run"></textarea>
+            <small>A random title is picked for each event.</small>
+          </label>
+          <label>Event descriptions (one per line)
+            <textarea id="eventDescriptions" rows="6" placeholder="Join us for a refreshing session…"></textarea>
+            <small>A random description is picked for each event.</small>
+          </label>
+        </div>
       </section>
     </main>
 
@@ -219,7 +304,7 @@
       <div class="actionbar-inner">
         <span class="actionbar-hint" id="actionbar-hint">Ready.</span>
         <div class="actionbar-buttons">
-          <button type="button" id="run-now" class="secondary">▶ Run now (test)</button>
+          <button type="button" id="run-now" class="secondary">▶ Run activities now (test)</button>
           <button type="button" id="save" class="primary">💾 Save settings</button>
         </div>
       </div>
@@ -249,6 +334,6 @@
       </section>
     </main>
 
-    <script src="app.js"></script>
+    <script src="app.js?v=5"></script>
   </body>
 </html>

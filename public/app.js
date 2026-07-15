@@ -163,21 +163,38 @@ const tokenCount = () => allUsers.filter((u) => u.hasToken).length;
 
 /* ---------- tabs ---------- */
 
+let activeTab = 'activities';
+
 function switchTab(name) {
+  activeTab = name;
   document.querySelectorAll('.tab').forEach((t) =>
     t.classList.toggle('active', t.dataset.tab === name),
   );
   $('panel-activities').classList.toggle('hidden', name !== 'activities');
+  $('panel-events').classList.toggle('hidden', name !== 'events');
   $('panel-notify').classList.toggle('hidden', name !== 'notify');
-  $('activities-actionbar').classList.toggle('hidden', name !== 'activities');
+  // Save/Run bar applies to the whole config (activities + events).
+  $('activities-actionbar').classList.toggle('hidden', name === 'notify');
+  // Run now is scoped to the tab you're on.
+  $('run-now').textContent =
+    name === 'events' ? '▶ Run events now (test)' : '▶ Run activities now (test)';
 }
 
 /* ---------- current form state (activities) ---------- */
+
+function linesToArray(text) {
+  return (text || '')
+    .split('\n')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
 
 function formState() {
   return {
     enabled: $('enabled').checked,
     cron: $('cron').value.trim(),
+    // activities
+    activitiesEnabled: $('activitiesEnabled').checked,
     durationMinutes: parseInt($('duration').value, 10) || 0,
     minMembers: parseInt($('minMembers').value, 10) || 0,
     maxMembers: parseInt($('maxMembers').value, 10) || 0,
@@ -186,6 +203,18 @@ function formState() {
     activityType: $('activityType').value,
     autoEnd: $('autoEnd').checked,
     attachDojo: $('attachDojo').checked,
+    // events
+    eventsEnabled: $('eventsEnabled').checked,
+    minEvents: parseInt($('minEvents').value, 10) || 0,
+    maxEvents: parseInt($('maxEvents').value, 10) || 0,
+    eventIsEventRatio: parseInt($('eventIsEventRatio').value, 10) || 0,
+    eventDurationMinutes: parseInt($('eventDurationMinutes').value, 10) || 1,
+    eventFutureMinDays: parseInt($('eventFutureMinDays').value, 10) || 0,
+    eventFutureMaxDays: parseInt($('eventFutureMaxDays').value, 10) || 0,
+    eventAttachPhoto: $('eventAttachPhoto').checked,
+    eventAttachDojo: $('eventAttachDojo').checked,
+    eventTitles: linesToArray($('eventTitles').value),
+    eventDescriptions: linesToArray($('eventDescriptions').value),
     selectedUserIds: [...selected].sort((a, b) => a - b),
   };
 }
@@ -210,6 +239,19 @@ function refreshUi() {
   
   // Render cron details
   renderCronDetails(s.cron);
+
+  // events summary
+  $('esum-state').textContent = s.eventsEnabled ? 'Enabled' : 'Disabled';
+  $('esum-state').className = 'stat-value ' + (s.eventsEnabled ? 'good' : 'warn');
+  $('esum-count').textContent =
+    s.minEvents === s.maxEvents ? `${s.minEvents}` : `${s.minEvents}–${s.maxEvents}`;
+  $('esum-ratio').textContent = `${s.eventIsEventRatio}%`;
+  $('esum-window').textContent =
+    s.eventFutureMinDays === s.eventFutureMaxDays
+      ? `${s.eventFutureMinDays}d ahead`
+      : `${s.eventFutureMinDays}–${s.eventFutureMaxDays}d ahead`;
+  $('esum-photo').textContent = s.eventAttachPhoto ? 'On' : 'Off';
+  $('esum-pool').textContent = `${selected.size} selected`;
 
   const dirty = isDirty();
   $('dirty-note').classList.toggle('hidden', !dirty);
@@ -360,6 +402,13 @@ function fillActivityTypes(types, current) {
 
 async function loadConfig() {
   const cfg = await api('/api/config');
+  // Reflect the RUNNING server's build (not static files) so a stale, un-restarted
+  // process is obvious. Old servers don't return `build`.
+  const tag = $('build-tag');
+  if (tag) {
+    tag.textContent = cfg.build ? `server: ${cfg.build}` : 'server: OLD — restart node!';
+    tag.classList.toggle('stale', !cfg.build);
+  }
   $('enabled').checked = cfg.enabled;
   $('cron').value = cfg.cron;
   $('duration').value = cfg.durationMinutes;
@@ -367,8 +416,21 @@ async function loadConfig() {
   $('maxMembers').value = cfg.maxMembers;
   $('minActivities').value = cfg.minActivities || 1;
   $('maxActivities').value = cfg.maxActivities || 1;
+  $('activitiesEnabled').checked = cfg.activitiesEnabled !== false;
   $('autoEnd').checked = cfg.autoEnd;
   $('attachDojo').checked = cfg.attachDojo;
+  // events
+  $('eventsEnabled').checked = !!cfg.eventsEnabled;
+  $('minEvents').value = cfg.minEvents ?? 1;
+  $('maxEvents').value = cfg.maxEvents ?? 2;
+  $('eventIsEventRatio').value = cfg.eventIsEventRatio ?? 50;
+  $('eventDurationMinutes').value = cfg.eventDurationMinutes ?? 120;
+  $('eventFutureMinDays').value = cfg.eventFutureMinDays ?? 1;
+  $('eventFutureMaxDays').value = cfg.eventFutureMaxDays ?? 30;
+  $('eventAttachPhoto').checked = cfg.eventAttachPhoto !== false;
+  $('eventAttachDojo').checked = cfg.eventAttachDojo !== false;
+  $('eventTitles').value = (cfg.eventTitles || []).join('\n');
+  $('eventDescriptions').value = (cfg.eventDescriptions || []).join('\n');
   fillActivityTypes(cfg.activityTypes || ['CUSTOM'], cfg.activityType);
   selected.clear();
   (cfg.selectedUserIds || []).forEach((id) => selected.add(id));
@@ -392,17 +454,32 @@ async function save() {
   }
 }
 
-async function runNow() {
-  banner('Running one activity…', 'info');
+async function runNow(scope = 'activities') {
+  const kind = scope === 'events' ? 'event' : 'activity';
+  banner(`Running ${kind} test…`, 'info');
+  $('run-now').disabled = true;
   try {
-    const r = await api('/api/run-now', { method: 'POST' });
-    if (r.ok) banner(`✓ Created activity #${r.activityId} with ${r.memberCount} member(s).`, 'success');
-    else if (r.skipped)
-      banner(`Skipped: ${r.reason === 'no-users' ? 'select at least one user first' : r.reason}.`, 'error');
-    else banner(`Failed: ${r.error}`, 'error');
+    const r = await api('/api/run-now', { method: 'POST', body: JSON.stringify({ scope }) });
+    if (r.skipped) {
+      const why = r.reason === 'no-users'
+        ? 'select at least one user first'
+        : r.reason === 'nothing-enabled'
+          ? `enable ${kind}s first`
+          : r.reason;
+      banner(`Skipped: ${why}.`, 'error');
+    } else if (r.ok) {
+      const parts = [];
+      if (r.activitiesCreated) parts.push(`${r.activitiesCreated} activity(ies), ${r.totalMembers} member(s)`);
+      if (r.eventsCreated) parts.push(`${r.eventsCreated} event(s)`);
+      banner(`✓ Created ${parts.join(' + ') || 'nothing'}.`, 'success');
+    } else {
+      banner(`Nothing created${r.error ? `: ${r.error}` : '.'}`, 'error');
+    }
     loadLogs();
   } catch (err) {
     banner(`Run failed: ${err.message}`, 'error');
+  } finally {
+    $('run-now').disabled = false;
   }
 }
 
@@ -411,9 +488,13 @@ async function runNow() {
 function logDetail(e) {
   const bits = [];
   if (e.host) bits.push(`host: ${e.host}`);
+  if (e.owner) bits.push(`owner: ${e.owner}`);
+  if (e.isEvent != null) bits.push(e.isEvent ? 'isEvent: true' : 'isEvent: false');
   if (e.memberCount != null) bits.push(`${e.memberCount} member(s)`);
   if (e.location?.name) bits.push(`📍 ${e.location.name}`);
   if (e.dojoId != null) bits.push(`dojo #${e.dojoId}`);
+  if (e.hasPhoto) bits.push('📷 photo');
+  if (e.startTime) bits.push(`starts ${new Date(e.startTime).toLocaleString()}`);
   if (e.recipients != null) bits.push(`${e.recipients} recipient(s)`);
   return bits.join(' · ');
 }
@@ -496,11 +577,16 @@ async function initializeApp() {
   $('interval-n').addEventListener('input', applyPreset);
   $('daily-time').addEventListener('input', applyPreset);
   $('user-search').addEventListener('input', renderUsers);
-  ['enabled', 'cron', 'duration', 'minMembers', 'maxMembers', 'minActivities', 'maxActivities', 'activityType', 'autoEnd', 'attachDojo']
-    .forEach((id) => {
-      $(id).addEventListener('input', refreshUi);
-      $(id).addEventListener('change', refreshUi);
-    });
+  [
+    'enabled', 'cron', 'duration', 'minMembers', 'maxMembers', 'minActivities',
+    'maxActivities', 'activityType', 'activitiesEnabled', 'autoEnd', 'attachDojo',
+    'eventsEnabled', 'minEvents', 'maxEvents', 'eventIsEventRatio', 'eventDurationMinutes',
+    'eventFutureMinDays', 'eventFutureMaxDays', 'eventAttachPhoto', 'eventAttachDojo',
+    'eventTitles', 'eventDescriptions',
+  ].forEach((id) => {
+    $(id).addEventListener('input', refreshUi);
+    $(id).addEventListener('change', refreshUi);
+  });
   $('select-all').addEventListener('click', () => {
     allUsers.forEach((u) => selected.add(u.id));
     renderUsers();
@@ -512,7 +598,9 @@ async function initializeApp() {
     refreshUi();
   });
   $('save').addEventListener('click', save);
-  $('run-now').addEventListener('click', runNow);
+  $('run-now').addEventListener('click', () =>
+    runNow(activeTab === 'events' ? 'events' : 'activities'),
+  );
 
   // notifications
   $('notif-search').addEventListener('input', renderNotifUsers);

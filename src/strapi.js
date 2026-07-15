@@ -140,3 +140,53 @@ export async function endActivity(documentId, endTimeIso) {
     data: { sessionStatus: 'ended', endTime: endTimeIso },
   });
 }
+
+/** Create an Event. Returns { id, documentId }. */
+export async function createEvent(data) {
+  const res = await request('POST', '/events', { data });
+  const entity = res?.data || {};
+  return { id: entity.id, documentId: entity.documentId };
+}
+
+/**
+ * Download an image and upload it to Strapi's media library. Returns the new
+ * file id (for linking to a media field like eventImage). Uses multipart, so
+ * it bypasses the JSON `request()` helper. Logs the upload call.
+ */
+export async function uploadImageFromUrl(imageUrl, filename = 'event.jpg') {
+  const { apiBase } = origins();
+
+  const imgRes = await fetch(imageUrl, { redirect: 'follow' });
+  if (!imgRes.ok) throw new Error(`image download failed (${imgRes.status})`);
+  const arrayBuf = await imgRes.arrayBuffer();
+  const contentType = imgRes.headers.get('content-type') || 'image/jpeg';
+  const blob = new Blob([arrayBuf], { type: contentType });
+
+  const form = new FormData();
+  form.append('files', blob, filename);
+
+  const start = Date.now();
+  // Do NOT set Content-Type — fetch adds the multipart boundary itself.
+  const res = await fetch(`${apiBase}/upload`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token()}` },
+    body: form,
+  });
+  const ms = Date.now() - start;
+  const json = await res.json().catch(() => null);
+
+  log(res.ok ? 'api' : 'error', `POST /api/upload → ${res.status} (${ms}ms)`, {
+    api: true,
+    method: 'POST',
+    path: '/api/upload',
+    status: res.status,
+    ms,
+  });
+
+  if (!res.ok) {
+    throw new Error(`upload failed (${res.status}): ${json?.error?.message || ''}`);
+  }
+  const id = Array.isArray(json) ? json[0]?.id : json?.id;
+  if (!id) throw new Error('upload returned no file id');
+  return id;
+}

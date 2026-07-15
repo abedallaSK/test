@@ -6,13 +6,15 @@
 import cron from 'node-cron';
 import { getConfig } from './config.js';
 import { log } from './logger.js';
-import { randomIsraeliLocation } from './locations.js';
+import { randomIsraeliLocation, randomIsraeliPlaceName } from './locations.js';
 import {
   getUsers,
   getDojos,
   createActivity,
   createActivityMember,
   endActivity,
+  createEvent,
+  uploadImageFromUrl,
 } from './strapi.js';
 
 const TIMEZONE = 'Asia/Jerusalem';
@@ -48,8 +50,15 @@ async function refreshUserNames(ids) {
   return ids.map((id) => userNameCache.get(id) || `#${id}`);
 }
 
-/** Run one activity-creation cycle. Returns a result summary. */
-export async function runOnce({ manual = false } = {}) {
+/**
+ * Run one creation cycle. Returns a summary.
+ * @param {object} opts
+ * @param {boolean} [opts.manual] - true for a UI-triggered run.
+ * @param {'all'|'activities'|'events'} [opts.scope] - what to create.
+ *   'all' (scheduled) respects the enable toggles; 'activities'/'events'
+ *   (a scoped manual test) force that kind regardless of its toggle.
+ */
+export async function runOnce({ manual = false, scope = 'all' } = {}) {
   const cfg = getConfig();
 
   if (!cfg.enabled && !manual) {
@@ -61,14 +70,37 @@ export async function runOnce({ manual = false } = {}) {
     return { skipped: true, reason: 'no-users' };
   }
 
-  // Determine how many activities to create
+  const doActivities = scope === 'activities' || (scope === 'all' && cfg.activitiesEnabled);
+  const doEvents = scope === 'events' || (scope === 'all' && cfg.eventsEnabled);
+
+  if (!doActivities && !doEvents) {
+    log('skip', 'Nothing enabled for this run', { manual, scope });
+    return { skipped: true, reason: 'nothing-enabled' };
+  }
+
+  const activitiesCreated = doActivities ? await createActivitiesBatch(cfg, { manual }) : [];
+  const eventsCreated = doEvents ? await createEventsBatch(cfg) : [];
+
+  const totalMembers = activitiesCreated.reduce((s, a) => s + a.memberCount, 0);
+  return {
+    ok: activitiesCreated.length > 0 || eventsCreated.length > 0,
+    activitiesCreated: activitiesCreated.length,
+    totalMembers,
+    activityIds: activitiesCreated.map((a) => a.id),
+    eventsCreated: eventsCreated.length,
+    eventIds: eventsCreated.map((e) => e.id),
+  };
+}
+
+/** Create the run's activities, partitioning users so each is in one activity. */
+async function createActivitiesBatch(cfg, { manual = false } = {}) {
   const numActivities = randInt(cfg.minActivities, cfg.maxActivities);
-  
+
   // Ensure we have enough users for at least 1 member per activity
   const minUsersNeeded = numActivities * (cfg.minMembers + 1); // host + members per activity
   if (cfg.selectedUserIds.length < minUsersNeeded) {
     log('error', `Not enough users: need at least ${minUsersNeeded} for ${numActivities} activities`, { manual });
-    return { ok: false, error: `Need at least ${minUsersNeeded} users for ${numActivities} activities` };
+    return [];
   }
 
   // Shuffle all selected users and distribute them across activities
@@ -183,13 +215,78 @@ export async function runOnce({ manual = false } = {}) {
     }
   }
 
-  const totalMembers = activitiesCreated.reduce((sum, a) => sum + a.memberCount, 0);
-  return { 
-    ok: activitiesCreated.length > 0, 
-    activitiesCreated: activitiesCreated.length,
-    totalMembers,
-    activityIds: activitiesCreated.map(a => a.id)
-  };
+  return activitiesCreated;
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Create the run's events, sharing the selected-users pool as owners. */
+async function createEventsBatch(cfg) {
+  const numEvents = randInt(cfg.minEvents, cfg.maxEvents);
+  const created = [];
+
+  for (let i = 0; i < numEvents; i++) {
+    try {
+      const owner = pick(cfg.selectedUserIds);
+      const title = pick(cfg.eventTitles);
+      const description = pick(cfg.eventDescriptions);
+      const isEvent = Math.random() * 100 < cfg.eventIsEventRatio;
+      const locationName = randomIsraeliPlaceName();
+
+      // startTime strictly in the future
+      const daysAhead = randInt(cfg.eventFutureMinDays, cfg.eventFutureMaxDays);
+      const startMs = Date.now() + daysAhead * DAY_MS + Math.floor(Math.random() * DAY_MS);
+      const startTime = new Date(startMs).toISOString();
+      const endTime = new Date(startMs + cfg.eventDurationMinutes * 60 * 1000).toISOString();
+
+      let dojoId = null;
+      if (cfg.eventAttachDojo) {
+        try {
+          const dojos = await getDojos();
+          if (dojos.length) dojoId = pick(dojos).id;
+        } catch (err) {
+          log('info', `Could not fetch dojos for event, continuing: ${err.message}`);
+        }
+      }
+
+      let imageId = null;
+      if (cfg.eventAttachPhoto) {
+        try {
+          const seed = `evt${Date.now()}-${i}`;
+          imageId = await uploadImageFromUrl(
+            `https://picsum.photos/seed/${seed}/800/600`,
+            `event-${seed}.jpg`,
+          );
+        } catch (err) {
+          log('info', `Event photo skipped: ${err.message}`);
+        }
+      }
+
+      const data = { title, description, startTime, endTime, isEvent, location: locationName, owner };
+      if (dojoId != null) data.dojo = dojoId;
+      if (imageId != null) data.eventImage = imageId;
+
+      const { id, documentId } = await createEvent(data);
+      const [ownerName] = await refreshUserNames([owner]);
+
+      log('success', `Created ${isEvent ? 'event' : 'activity-type event'} #${id}: "${title}"`, {
+        eventId: id,
+        documentId,
+        owner: ownerName,
+        isEvent,
+        location: { name: locationName },
+        dojoId,
+        hasPhoto: imageId != null,
+        startTime,
+        endTime,
+      });
+      created.push({ id, documentId, isEvent });
+    } catch (err) {
+      log('error', `Event ${i + 1} creation failed: ${err.message}`);
+    }
+  }
+
+  return created;
 }
 
 /** (Re)build the cron job from the current config. Call after any config change. */

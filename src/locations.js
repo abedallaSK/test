@@ -34,4 +34,13 @@ export function randomIsraeliLocation() {
   };
 }
 
+/**
+ * The Event content type stores `location` as a plain string (no lat/lng
+ * component), so return a human place name inside Israel.
+ */
+export function randomIsraeliPlaceName() {
+  const base = ISRAEL_LOCATIONS[Math.floor(Math.random() * ISRAEL_LOCATIONS.length)];
+  return `${base.name}, Israel`;
+}
+
 export { ISRAEL_LOCATIONS };

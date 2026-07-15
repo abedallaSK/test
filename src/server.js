@@ -20,6 +20,11 @@ import { sendExpoPush, isExpoPushToken } from './expo.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
 
+// Bumped whenever server-side behaviour changes. Surfaced to the UI so you can
+// confirm the RUNNING process (not just static files) is the latest — Node does
+// not hot-reload .js edits, so this only changes after a real restart.
+const BUILD = 'build-5 (scoped run)';
+
 // Simple session-based auth
 const sessions = new Map(); // token -> { username, createdAt }
 
@@ -47,9 +52,17 @@ function requireAuth(req, res, next) {
 
 const app = express();
 app.use(express.json());
-app.use(express.static(path.join(__dirname, '..', 'public')));
+// Serve the UI, but never let the browser cache it — otherwise a stale app.js
+// can keep running old behaviour (e.g. ignoring the run scope) after a deploy.
+app.use(
+  express.static(path.join(__dirname, '..', 'public'), {
+    etag: true,
+    lastModified: true,
+    setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache'),
+  }),
+);
 
-app.get('/api/health', (req, res) => res.json({ ok: true }));
+app.get('/api/health', (req, res) => res.json({ ok: true, build: BUILD }));
 
 /** Login endpoint */
 app.post('/api/login', (req, res) => {
@@ -106,7 +119,7 @@ app.get('/api/dojos', async (req, res) => {
 
 app.get('/api/config', (req, res) => {
   if (!isAuthenticated(req)) return res.status(401).json({ error: 'Authentication required' });
-  res.json({ ...getConfig(), activityTypes: ACTIVITY_TYPES });
+  res.json({ ...getConfig(), activityTypes: ACTIVITY_TYPES, build: BUILD });
 });
 
 app.put('/api/config', (req, res) => {
@@ -124,7 +137,9 @@ app.put('/api/config', (req, res) => {
 app.post('/api/run-now', async (req, res) => {
   if (!isAuthenticated(req)) return res.status(401).json({ error: 'Authentication required' });
   try {
-    const result = await runOnce({ manual: true });
+    const allowed = ['all', 'activities', 'events'];
+    const scope = allowed.includes(req.body?.scope) ? req.body.scope : 'all';
+    const result = await runOnce({ manual: true, scope });
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
