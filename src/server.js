@@ -9,6 +9,7 @@ import './loadenv.js'; // MUST be first — loads .env before any module reads p
 import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import crypto from 'node:crypto';
 
 import { getConfig, updateConfig, ACTIVITY_TYPES } from './config.js';
 import { getLogs, log } from './logger.js';
@@ -23,7 +24,7 @@ const PORT = process.env.PORT || 3000;
 const sessions = new Map(); // token -> { username, createdAt }
 
 function generateSessionToken() {
-  return require('crypto').randomBytes(32).toString('hex');
+  return crypto.randomBytes(32).toString('hex');
 }
 
 function isAuthenticated(req) {
