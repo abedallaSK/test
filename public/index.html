@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Activity Bot — Settings</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo">🥋</span>
+        <div>
+          <h1>Activity Bot</h1>
+          <p class="sub">Dummy Activities &amp; members (in Israel 🇮🇱) + Expo push notifications</p>
+        </div>
+      </div>
+      <div class="status-pill" id="status-pill">
+        <span class="dot"></span><span id="status-text">Loading…</span>
+      </div>
+    </header>
+
+    <nav class="tabs">
+      <button type="button" class="tab active" data-tab="activities">🥋 Activity generator</button>
+      <button type="button" class="tab" data-tab="notify">🔔 Push notifications</button>
+    </nav>
+
+    <div id="banner" class="banner hidden"></div>
+
+    <!-- ============ ACTIVITIES TAB ============ -->
+    <main id="panel-activities">
+      <section class="card summary">
+        <div class="summary-grid">
+          <div class="stat"><span class="stat-label">State</span><span class="stat-value" id="sum-state">—</span></div>
+          <div class="stat"><span class="stat-label">Schedule</span><span class="stat-value" id="sum-schedule">—</span></div>
+          <div class="stat"><span class="stat-label">Duration</span><span class="stat-value" id="sum-duration">—</span></div>
+          <div class="stat"><span class="stat-label">Members / activity</span><span class="stat-value" id="sum-members">—</span></div>
+          <div class="stat"><span class="stat-label">Users in pool</span><span class="stat-value" id="sum-pool">—</span></div>
+          <div class="stat"><span class="stat-label">On timer end</span><span class="stat-value" id="sum-autoend">—</span></div>
+        </div>
+        <p class="dirty-note hidden" id="dirty-note">● You have unsaved changes — click <b>Save settings</b> to apply.</p>
+      </section>
+
+      <details class="card info">
+        <summary>ℹ️ How this works</summary>
+        <div class="info-body">
+          <p>On each scheduled tick (and when you press <b>Run now</b>) the bot creates one
+          <b>Activity</b> (<code>POST /api/activities</code>) and joins members to it
+          (<code>POST /api/activity-members</code>) — it does not create events:</p>
+          <ul>
+            <li>A random <b>host</b> from your pool, plus a random number of <b>members</b>.</li>
+            <li>A random real <b>location inside Israel</b> with slight jitter.</li>
+            <li>Your chosen <b>duration</b> and <b>activity type</b>, optionally a random <b>dojo</b>.</li>
+            <li>With <b>auto-end</b> on, it ends the activity once the duration elapses.</li>
+          </ul>
+          <p class="muted">Every Strapi call is shown in the API log at the bottom.</p>
+        </div>
+      </details>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>🗓️ Status &amp; schedule</h2>
+          <label class="switch big" title="Master switch. When off, the cron schedule does not run (Run now still works).">
+            <input type="checkbox" id="enabled" /><span class="track"></span><span class="switch-label">Enabled</span>
+          </label>
+        </div>
+        <div class="grid">
+          <label>Schedule preset
+            <select id="preset">
+              <option value="custom">Custom (raw cron)</option>
+              <option value="minutes">Every N minutes</option>
+              <option value="hours">Every N hours</option>
+              <option value="daily">Daily at a time</option>
+            </select>
+            <small>Pick a preset to build the cron expression, or Custom to type your own.</small>
+          </label>
+          <label id="wrap-n" class="hidden">Interval (N)
+            <input type="number" id="interval-n" min="1" value="30" />
+            <small>Minutes / hours between runs.</small>
+          </label>
+          <label id="wrap-time" class="hidden">Time of day (Israel)
+            <input type="time" id="daily-time" value="09:00" />
+            <small>Local Asia/Jerusalem time.</small>
+          </label>
+          <label>Cron expression
+            <input type="text" id="cron" placeholder="*/30 * * * *" />
+            <small id="cron-human">Standard 5-field cron, Asia/Jerusalem time.</small>
+          </label>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>⚙️ Activity settings</h2>
+        <div class="grid">
+          <label>Duration / timer (minutes)
+            <input type="number" id="duration" min="1" value="30" />
+            <small>How long each session lasts.</small>
+          </label>
+          <label>Activity type
+            <select id="activityType"></select>
+            <small>EVENT, CLASS, or CUSTOM.</small>
+          </label>
+          <label>Min members
+            <input type="number" id="minMembers" min="0" value="1" />
+            <small>Fewest participants besides the host.</small>
+          </label>
+          <label>Max members
+            <input type="number" id="maxMembers" min="0" value="3" />
+            <small>Most participants. Capped by pool size.</small>
+          </label>
+        </div>
+        <div class="toggles">
+          <label class="switch" title="When the timer elapses, flip the activity to ended.">
+            <input type="checkbox" id="autoEnd" /><span class="track"></span><span class="switch-label">Auto-end after timer</span>
+          </label>
+          <label class="switch" title="Fetch dojos and link each activity to a random one.">
+            <input type="checkbox" id="attachDojo" /><span class="track"></span><span class="switch-label">Attach a random dojo</span>
+          </label>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>👥 Users pool</h2>
+          <div class="user-actions">
+            <input type="search" id="user-search" placeholder="Filter users…" />
+            <button type="button" id="select-all" class="ghost">Select all</button>
+            <button type="button" id="clear-all" class="ghost">Clear</button>
+            <span id="selected-count" class="count">0 selected</span>
+          </div>
+        </div>
+        <p class="hint">Pick who can appear as hosts and members. Each run chooses randomly from this pool.</p>
+        <div id="users" class="users"><span class="loading">Loading users…</span></div>
+      </section>
+    </main>
+
+    <!-- ============ NOTIFICATIONS TAB ============ -->
+    <main id="panel-notify" class="hidden">
+      <section class="card">
+        <h2>✍️ Compose notification</h2>
+        <div class="grid">
+          <label>Title
+            <input type="text" id="notif-title" placeholder="e.g. New activity nearby!" />
+            <small>Bold headline shown in the push.</small>
+          </label>
+          <label>Message
+            <input type="text" id="notif-body" placeholder="Write your message…" />
+            <small>The notification body text.</small>
+          </label>
+        </div>
+        <p class="muted" style="margin:12px 0 0">Sent via Expo push to each user's device token (their <code>fcmToken</code>).</p>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>🎯 Recipients</h2>
+          <span id="notif-target-count" class="count">0 with a token</span>
+        </div>
+        <div class="seg">
+          <label class="segbtn"><input type="radio" name="notif-mode" value="selected" checked /><span>Selected users</span></label>
+          <label class="segbtn"><input type="radio" name="notif-mode" value="all" /><span>All users with a token</span></label>
+        </div>
+
+        <div id="notif-picker">
+          <div class="user-actions" style="margin:14px 0 8px">
+            <input type="search" id="notif-search" placeholder="Filter users…" />
+            <label class="switch tiny" title="Hide users that have no device token.">
+              <input type="checkbox" id="only-token" checked /><span class="track"></span><span class="switch-label">Only users with a token</span>
+            </label>
+            <button type="button" id="notif-select-all" class="ghost">Select all</button>
+            <button type="button" id="notif-clear-all" class="ghost">Clear</button>
+            <span id="notif-selected-count" class="count">0 selected</span>
+          </div>
+          <p class="hint">📱 marks a user with a registered device token. Users without one can't receive a push.</p>
+          <div id="notif-users" class="users"><span class="loading">Loading users…</span></div>
+        </div>
+
+        <p id="notif-all-note" class="hint hidden"></p>
+      </section>
+
+      <div class="notif-send-bar">
+        <span id="notif-hint" class="actionbar-hint">Select recipients and compose a message.</span>
+        <button type="button" id="send-notif" class="secondary">🔔 Send notification</button>
+      </div>
+    </main>
+
+    <!-- Sticky action bar (activities tab only) -->
+    <div class="actionbar" id="activities-actionbar">
+      <div class="actionbar-inner">
+        <span class="actionbar-hint" id="actionbar-hint">Ready.</span>
+        <div class="actionbar-buttons">
+          <button type="button" id="run-now" class="secondary">▶ Run now (test)</button>
+          <button type="button" id="save" class="primary">💾 Save settings</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Shared API / run log -->
+    <main class="logs-wrap">
+      <section class="card">
+        <div class="card-head">
+          <h2>📜 API &amp; run log</h2>
+          <div class="user-actions">
+            <label class="log-filter">Filter
+              <select id="log-filter">
+                <option value="all">All</option>
+                <option value="api">API calls</option>
+                <option value="success">Success</option>
+                <option value="error">Errors</option>
+              </select>
+            </label>
+            <label class="switch tiny" title="Reload the log every few seconds.">
+              <input type="checkbox" id="auto-refresh" checked /><span class="track"></span><span class="switch-label">Auto</span>
+            </label>
+            <button type="button" id="refresh-logs" class="ghost">Refresh</button>
+          </div>
+        </div>
+        <ul id="logs" class="logs"></ul>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>

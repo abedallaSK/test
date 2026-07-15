@@ -1,0 +1,18 @@
+{
+  "name": "activity-bot",
+  "version": "1.0.0",
+  "description": "Scheduled dummy Activity + Activity_Member generator for the Dojo Strapi backend, with a settings UI.",
+  "type": "module",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "node-cron": "^3.0.3"
+  }
+}
