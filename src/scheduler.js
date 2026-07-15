@@ -61,94 +61,135 @@ export async function runOnce({ manual = false } = {}) {
     return { skipped: true, reason: 'no-users' };
   }
 
-  const hostId = pick(cfg.selectedUserIds);
-  const others = cfg.selectedUserIds.filter((id) => id !== hostId);
-  const wanted = Math.min(randInt(cfg.minMembers, cfg.maxMembers), others.length);
-  const memberIds = shuffle(others).slice(0, wanted);
-
-  const location = randomIsraeliLocation();
-  const nowIso = new Date().toISOString();
-  const durationMs = cfg.durationMinutes * 60 * 1000;
-
-  let dojoId = null;
-  if (cfg.attachDojo) {
-    try {
-      const dojos = await getDojos();
-      if (dojos.length) dojoId = pick(dojos).id;
-    } catch (err) {
-      log('info', `Could not fetch dojos, continuing without one: ${err.message}`);
-    }
+  // Determine how many activities to create
+  const numActivities = randInt(cfg.minActivities, cfg.maxActivities);
+  
+  // Ensure we have enough users for at least 1 member per activity
+  const minUsersNeeded = numActivities * (cfg.minMembers + 1); // host + members per activity
+  if (cfg.selectedUserIds.length < minUsersNeeded) {
+    log('error', `Not enough users: need at least ${minUsersNeeded} for ${numActivities} activities`, { manual });
+    return { ok: false, error: `Need at least ${minUsersNeeded} users for ${numActivities} activities` };
   }
 
-  try {
-    const activityData = {
-      user: hostId,
-      startTime: nowIso,
-      duration: durationMs,
-      activityType: cfg.activityType,
-      sessionStatus: 'active',
-      visibleOnMap: true,
-      publicChatEnabled: true,
-      location,
-    };
-    if (dojoId != null) activityData.dojo = dojoId;
+  // Shuffle all selected users and distribute them across activities
+  const shuffledUsers = shuffle([...cfg.selectedUserIds]);
+  const activitiesCreated = [];
+  let userIndex = 0;
 
-    const { id, documentId } = await createActivity(activityData);
+  for (let actIdx = 0; actIdx < numActivities; actIdx++) {
+    // Calculate members for this activity
+    const remainingUsers = cfg.selectedUserIds.length - userIndex;
+    const maxPossibleMembers = Math.min(
+      cfg.maxMembers,
+      remainingUsers - 1 // keep at least 1 for host
+    );
+    
+    if (maxPossibleMembers < cfg.minMembers) {
+      log('info', `Not enough users left for activity ${actIdx + 1}, stopping`);
+      break;
+    }
 
-    // Host member first (isHost), then each participant.
-    await createActivityMember({
-      activity: id,
-      user: hostId,
-      joinTime: nowIso,
-      memberStatus: 'active',
-      isHost: true,
-    });
-    for (const memberId of memberIds) {
+    const wantedMembers = randInt(cfg.minMembers, maxPossibleMembers);
+    
+    // First user is host, rest are members
+    const hostId = shuffledUsers[userIndex++];
+    const memberIds = shuffledUsers.slice(userIndex, userIndex + wantedMembers);
+    userIndex += wantedMembers;
+
+    const location = randomIsraeliLocation();
+    const nowIso = new Date().toISOString();
+    const durationMs = cfg.durationMinutes * 60 * 1000;
+
+    let dojoId = null;
+    if (cfg.attachDojo) {
+      try {
+        const dojos = await getDojos();
+        if (dojos.length) dojoId = pick(dojos).id;
+      } catch (err) {
+        log('info', `Could not fetch dojos, continuing without one: ${err.message}`);
+      }
+    }
+
+    try {
+      const activityData = {
+        user: hostId,
+        startTime: nowIso,
+        duration: durationMs,
+        activityType: cfg.activityType,
+        sessionStatus: 'active',
+        visibleOnMap: true,
+        publicChatEnabled: true,
+        location,
+      };
+      if (dojoId != null) activityData.dojo = dojoId;
+
+      const { id, documentId } = await createActivity(activityData);
+
+      // Host member first (isHost), then each participant.
       await createActivityMember({
         activity: id,
-        user: memberId,
+        user: hostId,
         joinTime: nowIso,
         memberStatus: 'active',
-        isHost: false,
+        isHost: true,
       });
+      for (const memberId of memberIds) {
+        await createActivityMember({
+          activity: id,
+          user: memberId,
+          joinTime: nowIso,
+          memberStatus: 'active',
+          isHost: false,
+        });
+      }
+
+      const [hostName, ...memberNames] = await refreshUserNames([hostId, ...memberIds]);
+
+      log('success', `Created activity #${id} in ${location.name}`, {
+        activityId: id,
+        documentId,
+        host: hostName,
+        members: memberNames,
+        memberCount: memberIds.length,
+        dojoId,
+        location,
+        activityType: cfg.activityType,
+        durationMinutes: cfg.durationMinutes,
+        manual,
+        activityNumber: actIdx + 1,
+        totalActivities: numActivities,
+      });
+
+      activitiesCreated.push({ id, documentId, memberCount: memberIds.length });
+
+      // Auto-end after the timer (best-effort; only while the process is alive).
+      if (cfg.autoEnd && documentId) {
+        setTimeout(async () => {
+          try {
+            await endActivity(documentId, new Date().toISOString());
+            log('info', `Auto-ended activity #${id} after ${cfg.durationMinutes} min`, {
+              activityId: id,
+            });
+          } catch (err) {
+            log('error', `Failed to auto-end activity #${id}: ${err.message}`, {
+              activityId: id,
+            });
+          }
+        }, durationMs);
+      }
+    } catch (err) {
+      log('error', `Activity ${actIdx + 1} creation failed: ${err.message}`, { manual });
+      // Continue with next activity instead of failing entirely
     }
-
-    const [hostName, ...memberNames] = await refreshUserNames([hostId, ...memberIds]);
-
-    log('success', `Created activity #${id} in ${location.name}`, {
-      activityId: id,
-      documentId,
-      host: hostName,
-      members: memberNames,
-      memberCount: memberIds.length,
-      dojoId,
-      location,
-      activityType: cfg.activityType,
-      durationMinutes: cfg.durationMinutes,
-      manual,
-    });
-
-    // Auto-end after the timer (best-effort; only while the process is alive).
-    if (cfg.autoEnd && documentId) {
-      setTimeout(async () => {
-        try {
-          await endActivity(documentId, new Date().toISOString());
-          log('info', `Auto-ended activity #${id} after ${cfg.durationMinutes} min`, {
-            activityId: id,
-          });
-        } catch (err) {
-          log('error', `Failed to auto-end activity #${id}: ${err.message}`, {
-            activityId: id,
-          });
-        }
-      }, durationMs);
-    }
-
-    return { ok: true, activityId: id, documentId, memberCount: memberIds.length };
-  } catch (err) {
-    log('error', `Activity creation failed: ${err.message}`, { manual });
-    return { ok: false, error: err.message };
   }
+
+  const totalMembers = activitiesCreated.reduce((sum, a) => sum + a.memberCount, 0);
+  return { 
+    ok: activitiesCreated.length > 0, 
+    activitiesCreated: activitiesCreated.length,
+    totalMembers,
+    activityIds: activitiesCreated.map(a => a.id)
+  };
 }
 
 /** (Re)build the cron job from the current config. Call after any config change. */

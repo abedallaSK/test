@@ -48,6 +48,90 @@ body {
 .topbar h1 { margin: 0; font-size: 20px; letter-spacing: 0.2px; }
 .sub { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
 
+#logout-btn {
+  background: var(--card2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+#logout-btn:hover {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+}
+
+/* ---------- login screen ---------- */
+.login-screen {
+  position: fixed;
+  inset: 0;
+  background: rgba(13, 15, 22, 0.95);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+.login-card {
+  background: var(--card);
+  padding: 32px;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  max-width: 400px;
+  width: 90%;
+}
+.login-card h2 {
+  margin: 0 0 24px;
+  text-align: center;
+}
+.login-card label {
+  display: block;
+  margin-bottom: 16px;
+}
+.login-card input[type="text"],
+.login-card input[type="password"] {
+  width: 100%;
+  padding: 12px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 14px;
+}
+.login-card .primary {
+  width: 100%;
+  padding: 12px;
+  background: var(--accent);
+  border: none;
+  border-radius: 8px;
+  color: white;
+  font-size: 16px;
+  cursor: pointer;
+  font-weight: 600;
+}
+.login-card .primary:hover {
+  background: #5a7aff;
+}
+.login-card .error {
+  color: var(--danger);
+  margin-top: 16px;
+  text-align: center;
+}
+
+/* ---------- cron details ---------- */
+.cron-details {
+  background: var(--bg2);
+  padding: 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: monospace;
+}
+.cron-details div {
+  padding: 2px 0;
+  color: var(--muted);
+}
+
 .status-pill {
   display: inline-flex;
   align-items: center;

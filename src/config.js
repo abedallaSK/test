@@ -24,6 +24,8 @@ const config = {
   durationMinutes: int(process.env.DEFAULT_DURATION_MINUTES, 30),
   minMembers: int(process.env.DEFAULT_MIN_MEMBERS, 1),
   maxMembers: int(process.env.DEFAULT_MAX_MEMBERS, 3),
+  minActivities: int(process.env.DEFAULT_MIN_ACTIVITIES, 1),
+  maxActivities: int(process.env.DEFAULT_MAX_ACTIVITIES, 1),
   selectedUserIds: [],
   activityType: ACTIVITY_TYPES.includes(process.env.DEFAULT_ACTIVITY_TYPE)
     ? process.env.DEFAULT_ACTIVITY_TYPE
@@ -72,8 +74,24 @@ export function updateConfig(patch = {}) {
     next.maxMembers = Math.floor(m);
   }
 
+  if ('minActivities' in patch) {
+    const m = Number(patch.minActivities);
+    if (!Number.isFinite(m) || m < 1) throw new Error('minActivities must be >= 1');
+    next.minActivities = Math.floor(m);
+  }
+
+  if ('maxActivities' in patch) {
+    const m = Number(patch.maxActivities);
+    if (!Number.isFinite(m) || m < 1) throw new Error('maxActivities must be >= 1');
+    next.maxActivities = Math.floor(m);
+  }
+
   if (next.maxMembers < next.minMembers) {
     throw new Error('maxMembers must be >= minMembers');
+  }
+
+  if (next.maxActivities < next.minActivities) {
+    throw new Error('maxActivities must be >= minActivities');
   }
 
   if ('activityType' in patch) {

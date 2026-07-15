@@ -7,6 +7,7 @@ const selected = new Set(); // activity pool
 const notifSelected = new Set(); // notification recipients
 let savedSnapshot = null;
 let logTimer = null;
+let authToken = localStorage.getItem('authToken') || null;
 
 /* ---------- helpers ---------- */
 
@@ -21,11 +22,85 @@ function banner(message, type = 'info') {
   }
 }
 
-async function api(path, options) {
-  const res = await fetch(path, options);
+async function api(path, options = {}) {
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(options.headers || {}),
+  };
+  if (authToken) {
+    headers['Authorization'] = `Bearer ${authToken}`;
+  }
+  
+  const res = await fetch(path, { ...options, headers });
+  
+  // Handle 401 by redirecting to login
+  if (res.status === 401) {
+    logout();
+    throw new Error('Session expired');
+  }
+  
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
   return data;
+}
+
+async function login(username, password) {
+  try {
+    const res = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Login failed');
+    authToken = data.token;
+    localStorage.setItem('authToken', authToken);
+    return true;
+  } catch (err) {
+    throw err;
+  }
+}
+
+async function logout() {
+  authToken = null;
+  localStorage.removeItem('authToken');
+  try {
+    await fetch('/api/logout', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${authToken}` },
+    });
+  } catch {}
+  showLoginScreen();
+}
+
+async function checkAuth() {
+  if (!authToken) return false;
+  try {
+    const res = await fetch('/api/auth', {
+      headers: { 'Authorization': `Bearer ${authToken}` },
+    });
+    const data = await res.json();
+    return data.authenticated;
+  } catch {
+    return false;
+  }
+}
+
+function showLoginScreen() {
+  $('login-screen').classList.remove('hidden');
+  $('tabs').classList.add('hidden');
+  document.querySelectorAll('main').forEach(el => el.classList.add('hidden'));
+  $('activities-actionbar').classList.add('hidden');
+  $('.logs-wrap').classList.add('hidden');
+  $('logout-btn').classList.add('hidden');
+}
+
+function hideLoginScreen() {
+  $('login-screen').classList.add('hidden');
+  $('tabs').classList.remove('hidden');
+  $('activities-actionbar').classList.remove('hidden');
+  $('.logs-wrap').classList.remove('hidden');
+  $('logout-btn').classList.remove('hidden');
 }
 
 function cronToHuman(expr) {
@@ -38,6 +113,49 @@ function cronToHuman(expr) {
     return `Daily at ${String(m[2]).padStart(2, '0')}:${String(m[1]).padStart(2, '0')}`;
   if ((m = c.match(/^0 (\d+) \* \* \*$/))) return `Daily at ${String(m[1]).padStart(2, '0')}:00`;
   return `cron: ${c}`;
+}
+
+/** Parse cron expression and return detailed breakdown */
+function parseCronDetails(expr) {
+  const c = (expr || '').trim();
+  const parts = c.split(/\s+/);
+  if (parts.length !== 5) return null;
+  
+  const [minute, hour, dayOfMonth, month, dayOfWeek] = parts;
+  
+  const explainField = (field, name, min, max) => {
+    if (field === '*') return `${name}: Every value (${min}-${max})`;
+    if (field.startsWith('*/')) {
+      const step = field.slice(2);
+      return `${name}: Every ${step} ${name.toLowerCase()} (starting at ${min})`;
+    }
+    if (field.includes('-')) {
+      const [start, end] = field.split('-').map(Number);
+      return `${name}: From ${start} to ${end}`;
+    }
+    if (field.includes(',')) {
+      return `${name}: Specific values: ${field}`;
+    }
+    return `${name}: At ${field}`;
+  };
+  
+  return [
+    explainField(minute, 'Minute', 0, 59),
+    explainField(hour, 'Hour', 0, 23),
+    explainField(dayOfMonth, 'Day of month', 1, 31),
+    explainField(month, 'Month', 1, 12),
+    explainField(dayOfWeek, 'Day of week', 0, 6),
+  ];
+}
+
+function renderCronDetails(expr) {
+  const details = parseCronDetails(expr);
+  const container = $('cron-details');
+  if (!details) {
+    container.innerHTML = '<span class="muted">Invalid cron expression</span>';
+    return;
+  }
+  container.innerHTML = details.map(d => `<div>${d}</div>`).join('');
 }
 
 const tokenCount = () => allUsers.filter((u) => u.hasToken).length;
@@ -62,6 +180,8 @@ function formState() {
     durationMinutes: parseInt($('duration').value, 10) || 0,
     minMembers: parseInt($('minMembers').value, 10) || 0,
     maxMembers: parseInt($('maxMembers').value, 10) || 0,
+    minActivities: parseInt($('minActivities').value, 10) || 1,
+    maxActivities: parseInt($('maxActivities').value, 10) || 1,
     activityType: $('activityType').value,
     autoEnd: $('autoEnd').checked,
     attachDojo: $('attachDojo').checked,
@@ -86,6 +206,9 @@ function refreshUi() {
   $('sum-pool').textContent = `${selected.size} selected`;
   $('sum-autoend').textContent = s.autoEnd ? 'Auto-end' : 'Stay active';
   $('cron-human').textContent = `${cronToHuman(s.cron)} · Asia/Jerusalem time`;
+  
+  // Render cron details
+  renderCronDetails(s.cron);
 
   const dirty = isDirty();
   $('dirty-note').classList.toggle('hidden', !dirty);
@@ -241,6 +364,8 @@ async function loadConfig() {
   $('duration').value = cfg.durationMinutes;
   $('minMembers').value = cfg.minMembers;
   $('maxMembers').value = cfg.maxMembers;
+  $('minActivities').value = cfg.minActivities || 1;
+  $('maxActivities').value = cfg.maxActivities || 1;
   $('autoEnd').checked = cfg.autoEnd;
   $('attachDojo').checked = cfg.attachDojo;
   fillActivityTypes(cfg.activityTypes || ['CUSTOM'], cfg.activityType);
@@ -329,6 +454,39 @@ function setupAutoRefresh() {
 /* ---------- boot ---------- */
 
 async function init() {
+  // Check auth first
+  const authenticated = await checkAuth();
+  
+  if (!authenticated) {
+    showLoginScreen();
+  } else {
+    hideLoginScreen();
+    await initializeApp();
+  }
+  
+  // Login form handler
+  $('login-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const username = $('login-username').value.trim();
+    const password = $('login-password').value;
+    const errorEl = $('login-error');
+    
+    try {
+      errorEl.classList.add('hidden');
+      await login(username, password);
+      hideLoginScreen();
+      await initializeApp();
+    } catch (err) {
+      errorEl.textContent = err.message;
+      errorEl.classList.remove('hidden');
+    }
+  });
+  
+  // Logout button
+  $('logout-btn').addEventListener('click', logout);
+}
+
+async function initializeApp() {
   document.querySelectorAll('.tab').forEach((t) =>
     t.addEventListener('click', () => switchTab(t.dataset.tab)),
   );
@@ -337,7 +495,7 @@ async function init() {
   $('interval-n').addEventListener('input', applyPreset);
   $('daily-time').addEventListener('input', applyPreset);
   $('user-search').addEventListener('input', renderUsers);
-  ['enabled', 'cron', 'duration', 'minMembers', 'maxMembers', 'activityType', 'autoEnd', 'attachDojo']
+  ['enabled', 'cron', 'duration', 'minMembers', 'maxMembers', 'minActivities', 'maxActivities', 'activityType', 'autoEnd', 'attachDojo']
     .forEach((id) => {
       $(id).addEventListener('input', refreshUi);
       $(id).addEventListener('change', refreshUi);

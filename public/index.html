@@ -18,7 +18,25 @@
       <div class="status-pill" id="status-pill">
         <span class="dot"></span><span id="status-text">Loading…</span>
       </div>
+      <button type="button" id="logout-btn" class="hidden">🚪 Logout</button>
     </header>
+
+    <!-- Login Screen -->
+    <div id="login-screen" class="login-screen hidden">
+      <div class="login-card">
+        <h2>🔐 Login to Activity Bot</h2>
+        <form id="login-form">
+          <label>Username
+            <input type="text" id="login-username" placeholder="Enter username" required />
+          </label>
+          <label>Password
+            <input type="password" id="login-password" placeholder="Enter password" required />
+          </label>
+          <button type="submit" class="primary">Login</button>
+        </form>
+        <p id="login-error" class="error hidden"></p>
+      </div>
+    </div>
 
     <nav class="tabs">
       <button type="button" class="tab active" data-tab="activities">🥋 Activity generator</button>
@@ -86,6 +104,10 @@
             <input type="text" id="cron" placeholder="*/30 * * * *" />
             <small id="cron-human">Standard 5-field cron, Asia/Jerusalem time.</small>
           </label>
+          <label>Cron details
+            <div id="cron-details" class="cron-details"></div>
+            <small>Breakdown of each field in the cron expression.</small>
+          </label>
         </div>
       </section>
 
@@ -100,13 +122,21 @@
             <select id="activityType"></select>
             <small>EVENT, CLASS, or CUSTOM.</small>
           </label>
-          <label>Min members
+          <label>Min members per activity
             <input type="number" id="minMembers" min="0" value="1" />
             <small>Fewest participants besides the host.</small>
           </label>
-          <label>Max members
+          <label>Max members per activity
             <input type="number" id="maxMembers" min="0" value="3" />
             <small>Most participants. Capped by pool size.</small>
+          </label>
+          <label>Min activities per run
+            <input type="number" id="minActivities" min="1" value="1" />
+            <small>Minimum number of activities created each run.</small>
+          </label>
+          <label>Max activities per run
+            <input type="number" id="maxActivities" min="1" value="1" />
+            <small>Maximum number of activities created each run.</small>
           </label>
         </div>
         <div class="toggles">
