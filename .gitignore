@@ -1,1 +1,8 @@
-Nothing needs to be added to .gitignore since only a source file (src/server.js) was modified and no build artifacts, dependencies, or temporary files were detected in the changes.
+```
+# Environment
+.env
+
+# Logs
+*.log
+server.log
+```

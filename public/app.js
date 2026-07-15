@@ -90,8 +90,8 @@ function showLoginScreen() {
   $('login-screen').classList.remove('hidden');
   $('tabs').classList.add('hidden');
   document.querySelectorAll('main').forEach(el => el.classList.add('hidden'));
-  $('activities-actionbar').classList.add('hidden');
-  $('.logs-wrap').classList.add('hidden');
+  const logsWrap = document.querySelector('.logs-wrap');
+  if (logsWrap) logsWrap.classList.add('hidden');
   $('logout-btn').classList.add('hidden');
 }
 
@@ -99,7 +99,8 @@ function hideLoginScreen() {
   $('login-screen').classList.add('hidden');
   $('tabs').classList.remove('hidden');
   $('activities-actionbar').classList.remove('hidden');
-  $('.logs-wrap').classList.remove('hidden');
+  const logsWrap = document.querySelector('.logs-wrap');
+  if (logsWrap) logsWrap.classList.remove('hidden');
   $('logout-btn').classList.remove('hidden');
 }
 
