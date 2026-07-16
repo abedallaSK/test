@@ -23,7 +23,7 @@ const PORT = process.env.PORT || 3000;
 // Bumped whenever server-side behaviour changes. Surfaced to the UI so you can
 // confirm the RUNNING process (not just static files) is the latest — Node does
 // not hot-reload .js edits, so this only changes after a real restart.
-const BUILD = 'build-5 (scoped run)';
+const BUILD = 'build-6 (random duration + members)';
 
 // Simple session-based auth
 const sessions = new Map(); // token -> { username, createdAt }

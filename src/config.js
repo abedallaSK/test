@@ -54,7 +54,15 @@ const config = {
 
   // --- activities ---
   activitiesEnabled: bool(process.env.ACTIVITIES_ENABLED, true),
-  durationMinutes: int(process.env.DEFAULT_DURATION_MINUTES, 30),
+  // Duration is a random range (minutes). Each activity picks its own value.
+  minDurationMinutes: int(
+    process.env.DEFAULT_MIN_DURATION_MINUTES,
+    int(process.env.DEFAULT_DURATION_MINUTES, 30),
+  ),
+  maxDurationMinutes: int(
+    process.env.DEFAULT_MAX_DURATION_MINUTES,
+    Math.max(int(process.env.DEFAULT_DURATION_MINUTES, 30), 60),
+  ),
   minMembers: int(process.env.DEFAULT_MIN_MEMBERS, 1),
   maxMembers: int(process.env.DEFAULT_MAX_MEMBERS, 3),
   minActivities: int(process.env.DEFAULT_MIN_ACTIVITIES, 1),
@@ -114,10 +122,18 @@ export function updateConfig(patch = {}) {
     next.cron = patch.cron.trim();
   }
 
-  if ('durationMinutes' in patch) {
-    const d = Number(patch.durationMinutes);
-    if (!Number.isFinite(d) || d < 1) throw new Error('durationMinutes must be >= 1');
-    next.durationMinutes = Math.floor(d);
+  if ('minDurationMinutes' in patch) {
+    const d = Number(patch.minDurationMinutes);
+    if (!Number.isFinite(d) || d < 1) throw new Error('minDurationMinutes must be >= 1');
+    next.minDurationMinutes = Math.floor(d);
+  }
+  if ('maxDurationMinutes' in patch) {
+    const d = Number(patch.maxDurationMinutes);
+    if (!Number.isFinite(d) || d < 1) throw new Error('maxDurationMinutes must be >= 1');
+    next.maxDurationMinutes = Math.floor(d);
+  }
+  if (next.maxDurationMinutes < next.minDurationMinutes) {
+    throw new Error('maxDurationMinutes must be >= minDurationMinutes');
   }
 
   if ('minMembers' in patch) {

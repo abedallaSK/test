@@ -92,45 +92,32 @@ export async function runOnce({ manual = false, scope = 'all' } = {}) {
   };
 }
 
-/** Create the run's activities, partitioning users so each is in one activity. */
+/** Create the run's activities. Each activity independently samples a host plus
+ *  a random member count between min and max from the selected pool. */
 async function createActivitiesBatch(cfg, { manual = false } = {}) {
   const numActivities = randInt(cfg.minActivities, cfg.maxActivities);
-
-  // Ensure we have enough users for at least 1 member per activity
-  const minUsersNeeded = numActivities * (cfg.minMembers + 1); // host + members per activity
-  if (cfg.selectedUserIds.length < minUsersNeeded) {
-    log('error', `Not enough users: need at least ${minUsersNeeded} for ${numActivities} activities`, { manual });
-    return [];
-  }
-
-  // Shuffle all selected users and distribute them across activities
-  const shuffledUsers = shuffle([...cfg.selectedUserIds]);
   const activitiesCreated = [];
-  let userIndex = 0;
 
   for (let actIdx = 0; actIdx < numActivities; actIdx++) {
-    // Calculate members for this activity
-    const remainingUsers = cfg.selectedUserIds.length - userIndex;
-    const maxPossibleMembers = Math.min(
-      cfg.maxMembers,
-      remainingUsers - 1 // keep at least 1 for host
-    );
-    
-    if (maxPossibleMembers < cfg.minMembers) {
-      log('info', `Not enough users left for activity ${actIdx + 1}, stopping`);
-      break;
-    }
+    // Re-shuffle the full pool for each activity so member count is honoured
+    // independently (a user may appear in more than one activity in a run).
+    const poolShuffled = shuffle([...cfg.selectedUserIds]);
+    const hostId = poolShuffled[0];
+    const others = poolShuffled.slice(1);
 
-    const wantedMembers = randInt(cfg.minMembers, maxPossibleMembers);
-    
-    // First user is host, rest are members
-    const hostId = shuffledUsers[userIndex++];
-    const memberIds = shuffledUsers.slice(userIndex, userIndex + wantedMembers);
-    userIndex += wantedMembers;
+    // Random member count in [minMembers, maxMembers], clamped to how many
+    // OTHER users exist (can't add more members than we have users).
+    const wantedMembers = Math.min(
+      randInt(cfg.minMembers, cfg.maxMembers),
+      others.length,
+    );
+    const memberIds = others.slice(0, wantedMembers);
 
     const location = randomIsraeliLocation();
     const nowIso = new Date().toISOString();
-    const durationMs = cfg.durationMinutes * 60 * 1000;
+    // Random duration in [minDurationMinutes, maxDurationMinutes].
+    const durationMinutes = randInt(cfg.minDurationMinutes, cfg.maxDurationMinutes);
+    const durationMs = durationMinutes * 60 * 1000;
 
     let dojoId = null;
     if (cfg.attachDojo) {
@@ -186,7 +173,7 @@ async function createActivitiesBatch(cfg, { manual = false } = {}) {
         dojoId,
         location,
         activityType: cfg.activityType,
-        durationMinutes: cfg.durationMinutes,
+        durationMinutes,
         manual,
         activityNumber: actIdx + 1,
         totalActivities: numActivities,
@@ -199,7 +186,7 @@ async function createActivitiesBatch(cfg, { manual = false } = {}) {
         setTimeout(async () => {
           try {
             await endActivity(documentId, new Date().toISOString());
-            log('info', `Auto-ended activity #${id} after ${cfg.durationMinutes} min`, {
+            log('info', `Auto-ended activity #${id} after ${durationMinutes} min`, {
               activityId: id,
             });
           } catch (err) {

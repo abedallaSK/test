@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Activity Bot — Settings</title>
-    <link rel="stylesheet" href="styles.css?v=5" />
+    <link rel="stylesheet" href="styles.css?v=6" />
   </head>
   <body>
     <header class="topbar">
@@ -115,9 +115,13 @@
       <section class="card">
         <h2>⚙️ Activity settings</h2>
         <div class="grid">
-          <label>Duration / timer (minutes)
-            <input type="number" id="duration" min="1" value="30" />
-            <small>How long each session lasts.</small>
+          <label>Duration / timer — min (minutes)
+            <input type="number" id="minDuration" min="1" value="30" />
+            <small>Each activity picks a random duration…</small>
+          </label>
+          <label>Duration / timer — max (minutes)
+            <input type="number" id="maxDuration" min="1" value="60" />
+            <small>…between these two values.</small>
           </label>
           <label>Activity type
             <select id="activityType"></select>
@@ -125,11 +129,11 @@
           </label>
           <label>Min members per activity
             <input type="number" id="minMembers" min="0" value="1" />
-            <small>Fewest participants besides the host.</small>
+            <small>Fewest members added (besides the host).</small>
           </label>
           <label>Max members per activity
             <input type="number" id="maxMembers" min="0" value="3" />
-            <small>Most participants. Capped by pool size.</small>
+            <small>Most members. Each activity gets a random count in this range (capped by pool size).</small>
           </label>
           <label>Min activities per run
             <input type="number" id="minActivities" min="1" value="1" />
@@ -334,6 +338,6 @@
       </section>
     </main>
 
-    <script src="app.js?v=5"></script>
+    <script src="app.js?v=6"></script>
   </body>
 </html>

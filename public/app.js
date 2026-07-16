@@ -195,7 +195,8 @@ function formState() {
     cron: $('cron').value.trim(),
     // activities
     activitiesEnabled: $('activitiesEnabled').checked,
-    durationMinutes: parseInt($('duration').value, 10) || 0,
+    minDurationMinutes: parseInt($('minDuration').value, 10) || 1,
+    maxDurationMinutes: parseInt($('maxDuration').value, 10) || 1,
     minMembers: parseInt($('minMembers').value, 10) || 0,
     maxMembers: parseInt($('maxMembers').value, 10) || 0,
     minActivities: parseInt($('minActivities').value, 10) || 1,
@@ -230,7 +231,10 @@ function refreshUi() {
   $('sum-state').textContent = s.enabled ? 'Enabled' : 'Disabled';
   $('sum-state').className = 'stat-value ' + (s.enabled ? 'good' : 'warn');
   $('sum-schedule').textContent = cronToHuman(s.cron);
-  $('sum-duration').textContent = `${s.durationMinutes} min`;
+  $('sum-duration').textContent =
+    s.minDurationMinutes === s.maxDurationMinutes
+      ? `${s.minDurationMinutes} min`
+      : `${s.minDurationMinutes}–${s.maxDurationMinutes} min`;
   $('sum-members').textContent =
     s.minMembers === s.maxMembers ? `${s.minMembers}` : `${s.minMembers}–${s.maxMembers}`;
   $('sum-pool').textContent = `${selected.size} selected`;
@@ -411,7 +415,8 @@ async function loadConfig() {
   }
   $('enabled').checked = cfg.enabled;
   $('cron').value = cfg.cron;
-  $('duration').value = cfg.durationMinutes;
+  $('minDuration').value = cfg.minDurationMinutes ?? 30;
+  $('maxDuration').value = cfg.maxDurationMinutes ?? 60;
   $('minMembers').value = cfg.minMembers;
   $('maxMembers').value = cfg.maxMembers;
   $('minActivities').value = cfg.minActivities || 1;
@@ -578,7 +583,7 @@ async function initializeApp() {
   $('daily-time').addEventListener('input', applyPreset);
   $('user-search').addEventListener('input', renderUsers);
   [
-    'enabled', 'cron', 'duration', 'minMembers', 'maxMembers', 'minActivities',
+    'enabled', 'cron', 'minDuration', 'maxDuration', 'minMembers', 'maxMembers', 'minActivities',
     'maxActivities', 'activityType', 'activitiesEnabled', 'autoEnd', 'attachDojo',
     'eventsEnabled', 'minEvents', 'maxEvents', 'eventIsEventRatio', 'eventDurationMinutes',
     'eventFutureMinDays', 'eventFutureMaxDays', 'eventAttachPhoto', 'eventAttachDojo',
