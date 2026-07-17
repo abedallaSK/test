@@ -5,29 +5,29 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0d0f16" />
     <title>Activity Bot — Settings</title>
-    <link rel="stylesheet" href="styles.css?v=9" />
+    <link rel="stylesheet" href="styles.css?v=15" />
   </head>
   <body>
     <header class="topbar">
       <div class="brand">
-        <span class="logo">🥋</span>
+        <span class="logo"><span data-icon="zap"></span></span>
         <div class="brand-text">
           <h1>Activity Bot <span class="build" id="build-tag" title="Version reported by the running server">server: …</span></h1>
-          <p class="sub">Dummy Activities &amp; Events (in Israel 🇮🇱) + Expo push</p>
+          <p class="sub">Dummy Activities &amp; Events (in Israel) + Expo push</p>
         </div>
       </div>
 
       <div class="topbar-controls">
         <div class="env-picker" id="env-picker">
           <button type="button" class="env-current" id="env-current-btn" title="Switch / manage environments" aria-haspopup="true" aria-expanded="false">
-            <span class="env-icon">🌐</span>
+            <span class="env-icon" data-icon="globe"></span>
             <span class="env-current-name" id="env-current-name">…</span>
-            <span class="caret">▾</span>
+            <span class="caret" data-icon="chevron-down"></span>
           </button>
           <div class="env-menu hidden" id="env-menu">
             <div class="env-menu-label">Environments</div>
             <div class="env-list" id="env-list"></div>
-            <button type="button" class="env-add-toggle" id="env-add-toggle">＋ Add environment</button>
+            <button type="button" class="env-add-toggle" id="env-add-toggle"><span data-icon="plus"></span> Add environment</button>
             <form class="env-add-form hidden" id="env-add-form">
               <input type="text" id="env-add-name" placeholder="Name (e.g. Production)" autocomplete="off" />
               <input type="text" id="env-add-url" placeholder="https://api.example.com" autocomplete="off" />
@@ -42,22 +42,22 @@
         </div>
 
         <div class="theme-switch" role="group" aria-label="Theme">
-          <button type="button" class="theme-btn" data-theme-value="dark" title="Dark">🌙</button>
-          <button type="button" class="theme-btn" data-theme-value="light" title="Light">☀️</button>
-          <button type="button" class="theme-btn" data-theme-value="dojo" title="Dojo">🥋</button>
+          <button type="button" class="theme-btn" data-theme-value="dark" title="Dark"><span data-icon="moon"></span></button>
+          <button type="button" class="theme-btn" data-theme-value="light" title="Light"><span data-icon="sun"></span></button>
+          <button type="button" class="theme-btn" data-theme-value="dojo" title="Dojo"><span data-icon="flame"></span></button>
         </div>
 
         <div class="status-pill" id="status-pill">
           <span class="dot"></span><span id="status-text">Loading…</span>
         </div>
-        <button type="button" id="logout-btn" class="ghost hidden">🚪 <span class="hide-sm">Logout</span></button>
+        <button type="button" id="logout-btn" class="ghost hidden"><span data-icon="logout"></span> <span class="hide-sm">Logout</span></button>
       </div>
     </header>
 
     <!-- Login Screen -->
     <div id="login-screen" class="login-screen hidden">
       <div class="login-card">
-        <div class="login-logo">🥋</div>
+        <div class="login-logo"><span data-icon="zap"></span></div>
         <h2>Activity Bot</h2>
         <p class="login-tag">Sign in to manage schedules &amp; notifications</p>
         <form id="login-form">
@@ -74,10 +74,10 @@
     </div>
 
     <nav id="tabs" class="tabs">
-      <button type="button" class="tab active" data-tab="activities">🥋 <span>Activities</span></button>
-      <button type="button" class="tab" data-tab="events">📅 <span>Events</span></button>
-      <button type="button" class="tab" data-tab="notify">🔔 <span>Notifications</span></button>
-      <button type="button" class="tab" data-tab="whatsnew">📦 <span>What's New</span></button>
+      <button type="button" class="tab active" data-tab="activities"><span data-icon="activity"></span> <span>Activities</span></button>
+      <button type="button" class="tab" data-tab="events"><span data-icon="calendar"></span> <span>Events</span></button>
+      <button type="button" class="tab" data-tab="notify"><span data-icon="bell"></span> <span>Notifications</span></button>
+      <button type="button" class="tab" data-tab="whatsnew"><span data-icon="package"></span> <span>What's New</span></button>
     </nav>
 
     <div id="banner" class="banner hidden"></div>
@@ -93,11 +93,11 @@
           <div class="stat"><span class="stat-label">Users in pool</span><span class="stat-value" id="sum-pool">—</span></div>
           <div class="stat"><span class="stat-label">On timer end</span><span class="stat-value" id="sum-autoend">—</span></div>
         </div>
-        <p class="dirty-note hidden" id="dirty-note">● Unsaved changes — click <b>Save settings</b> to apply.</p>
+        <p class="dirty-note hidden" id="dirty-note"><span data-icon="alert"></span> Unsaved changes — click <b>Save settings</b> to apply.</p>
       </section>
 
       <details class="card info">
-        <summary>ℹ️ How this works</summary>
+        <summary><span data-icon="info"></span> How this works</summary>
         <div class="info-body">
           <p>On each <b>Activities</b> tick (and when you press <b>Run now</b>) the bot creates one
           <b>Activity</b> (<code>POST /api/activities</code>) and joins members to it
@@ -114,7 +114,7 @@
 
       <section class="card">
         <div class="card-head">
-          <h2>🗓️ Activities schedule</h2>
+          <h2><span data-icon="calendar"></span> Activities schedule</h2>
           <label class="switch big" title="Arm the Activities cron. When off, the schedule won't run (Run now still works).">
             <input type="checkbox" id="activitiesEnabled" /><span class="track"></span><span class="switch-label">Enabled</span>
           </label>
@@ -146,7 +146,7 @@
       </section>
 
       <section class="card">
-        <h2>⚙️ Activity settings</h2>
+        <h2><span data-icon="settings"></span> Activity settings</h2>
         <div class="grid">
           <label>Duration — min (minutes)
             <input type="number" id="minDuration" min="1" value="30" />
@@ -189,7 +189,7 @@
 
       <section class="card">
         <div class="card-head">
-          <h2>👥 Users pool</h2>
+          <h2><span data-icon="users"></span> Users pool</h2>
           <div class="user-actions">
             <input type="search" id="user-search" placeholder="Filter users…" />
             <button type="button" id="select-all" class="ghost">Select all</button>
@@ -213,7 +213,7 @@
           <div class="stat"><span class="stat-label">Start window</span><span class="stat-value" id="esum-window">—</span></div>
           <div class="stat"><span class="stat-label">Photo</span><span class="stat-value" id="esum-photo">—</span></div>
         </div>
-        <p class="dirty-note hidden" id="edirty-note">● Unsaved changes — click <b>Save settings</b> to apply.</p>
+        <p class="dirty-note hidden" id="edirty-note"><span data-icon="alert"></span> Unsaved changes — click <b>Save settings</b> to apply.</p>
       </section>
 
       <section class="card info-flat">
@@ -226,7 +226,7 @@
       <!-- Schedule A: isEvent = true -->
       <section class="card sched-true">
         <div class="card-head">
-          <h2>🟢 Events schedule — <code>isEvent = true</code> (100%)</h2>
+          <h2><span data-icon="dot" data-icon-class="tone-good"></span> Events schedule — <code>isEvent = true</code> (100%)</h2>
           <label class="switch big" title="Arm the real-events cron.">
             <input type="checkbox" id="eventsTrueEnabled" /><span class="track"></span><span class="switch-label">Enabled</span>
           </label>
@@ -268,7 +268,7 @@
       <!-- Schedule B: isEvent = false -->
       <section class="card sched-false">
         <div class="card-head">
-          <h2>🔵 Events schedule — <code>isEvent = false</code> (0%)</h2>
+          <h2><span data-icon="dot" data-icon-class="tone-accent"></span> Events schedule — <code>isEvent = false</code> (0%)</h2>
           <label class="switch big" title="Arm the activity-type events cron.">
             <input type="checkbox" id="eventsFalseEnabled" /><span class="track"></span><span class="switch-label">Enabled</span>
           </label>
@@ -309,7 +309,7 @@
       </section>
 
       <section class="card">
-        <h2>📅 Shared event settings</h2>
+        <h2><span data-icon="calendar"></span> Shared event settings</h2>
         <p class="hint">Applied to both schedules above.</p>
         <div class="grid">
           <label>Event duration (minutes)
@@ -337,7 +337,7 @@
 
       <section class="card">
         <div class="card-head">
-          <h2>✍️ Titles &amp; descriptions</h2>
+          <h2><span data-icon="edit"></span> Titles &amp; descriptions</h2>
           <span class="count" id="pool-counts">—</span>
         </div>
         <p class="hint">A random entry is picked for each event. Add lines below or paste many at once.</p>
@@ -345,7 +345,7 @@
           <div class="list-editor" id="titles-editor" data-field="eventTitles">
             <div class="list-editor-head">
               <h3>Event titles</h3>
-              <button type="button" class="ghost tiny-btn" data-toggle-raw>⇄ Paste mode</button>
+              <button type="button" class="ghost tiny-btn" data-toggle-raw><span data-icon="repeat"></span> Paste mode</button>
             </div>
             <div class="chips" data-list></div>
             <div class="list-add">
@@ -358,7 +358,7 @@
           <div class="list-editor" id="descs-editor" data-field="eventDescriptions">
             <div class="list-editor-head">
               <h3>Event descriptions</h3>
-              <button type="button" class="ghost tiny-btn" data-toggle-raw>⇄ Paste mode</button>
+              <button type="button" class="ghost tiny-btn" data-toggle-raw><span data-icon="repeat"></span> Paste mode</button>
             </div>
             <div class="chips" data-list></div>
             <div class="list-add">
@@ -374,7 +374,7 @@
     <!-- ============ NOTIFICATIONS TAB ============ -->
     <main id="panel-notify" class="hidden">
       <section class="card">
-        <h2>✍️ Compose notification</h2>
+        <h2><span data-icon="edit"></span> Compose notification</h2>
         <div class="grid">
           <label>Title
             <input type="text" id="notif-title" placeholder="e.g. New activity nearby!" />
@@ -389,7 +389,7 @@
         <div class="phone-preview" aria-hidden="true">
           <div class="phone-notch"></div>
           <div class="push-card">
-            <span class="push-app">🥋 Dojo</span>
+            <span class="push-app"><span data-icon="zap"></span> Dojo</span>
             <span class="push-title" id="pp-title">New activity nearby!</span>
             <span class="push-body" id="pp-body">Write your message…</span>
           </div>
@@ -400,7 +400,7 @@
 
       <section class="card">
         <div class="card-head">
-          <h2>🎯 Recipients</h2>
+          <h2><span data-icon="target"></span> Recipients</h2>
           <span id="notif-target-count" class="count">0 with a token</span>
         </div>
         <div class="seg">
@@ -418,7 +418,7 @@
             <button type="button" id="notif-clear-all" class="ghost">Clear</button>
             <span id="notif-selected-count" class="count">0 selected</span>
           </div>
-          <p class="hint">📱 marks a user with a registered device token. Users without one can't receive a push.</p>
+          <p class="hint"><span data-icon="smartphone"></span> marks a user with a registered device token. Users without one can't receive a push.</p>
           <div id="notif-users" class="users"><span class="loading">Loading users…</span></div>
         </div>
 
@@ -427,7 +427,7 @@
 
       <div class="notif-send-bar">
         <span id="notif-hint" class="actionbar-hint">Select recipients and compose a message.</span>
-        <button type="button" id="send-notif" class="secondary">🔔 Send notification</button>
+        <button type="button" id="send-notif" class="secondary"><span data-icon="bell"></span> Send notification</button>
       </div>
     </main>
 
@@ -440,11 +440,11 @@
           <div class="stat"><span class="stat-label">Latest Version</span><span class="stat-value" id="wnsum-latest">—</span></div>
           <div class="stat"><span class="stat-label">Platforms</span><span class="stat-value" id="wnsum-platforms">—</span></div>
         </div>
-        <p class="dirty-note hidden" id="wn-dirty-note">● Unsaved changes — click <b>Save settings</b> to apply.</p>
+        <p class="dirty-note hidden" id="wn-dirty-note"><span data-icon="alert"></span> Unsaved changes — click <b>Save settings</b> to apply.</p>
       </section>
 
       <details class="card info">
-        <summary>ℹ️ How this works</summary>
+        <summary><span data-icon="info"></span> How this works</summary>
         <div class="info-body">
           <p>Manage release notes and "What's New" entries for your app versions. Each entry includes:</p>
           <ul>
@@ -455,14 +455,14 @@
             <li><b>Order</b> — controls display order (higher = first).</li>
             <li><b>Active</b> — toggle visibility.</li>
           </ul>
-          <p class="muted">Changes are applied to the selected <b>environment</b>. Use the "Apply to All Envs" button to sync across all environments.</p>
+          <p class="muted">Pick one or more target environments in the <b>"Create on environments"</b> selector — the entry is created on each. Editing or deleting always targets the environment shown in the list below.</p>
         </div>
       </details>
 
       <section class="card">
         <div class="card-head">
-          <h2>➕ Add New Version Entry</h2>
-          <button type="button" id="wn-apply-all" class="secondary" title="Copy this entry to all environments">🌍 Apply to All Envs</button>
+          <h2><span data-icon="plus"></span> <span id="wn-form-title">Add New Version Entry</span></h2>
+          <span class="edit-indicator hidden" id="wn-edit-indicator">Editing existing entry</span>
         </div>
         <div class="grid">
           <label>Version *
@@ -495,28 +495,43 @@
           <textarea id="wn-description" rows="4" placeholder="Describe the changes..."></textarea>
           <small>Detailed release notes.</small>
         </label>
-        
-        <!-- Enhanced Media Upload Section -->
+
+        <!-- Drag & drop media zone -->
         <div style="margin-top:16px">
-          <label>Media (Images, Videos, GIFs)</label>
-          <div class="media-upload-area" id="wn-media-dropzone">
+          <label>Media <span class="muted">(images, videos, GIFs — drag, drop, or paste)</span></label>
+          <div class="media-upload-area" id="wn-media-dropzone" tabindex="0" role="button" aria-label="Upload media files">
             <input type="file" id="wn-media-file" accept="image/*,video/*,.gif" multiple style="display:none" />
-            <div class="dropzone-content">
-              <span class="dropzone-icon">📁</span>
-              <p><strong>Drag & drop</strong> media files here</p>
-              <p class="muted">or click to browse (PNG, JPG, GIF, MP4, WebM...)</p>
+            <div class="dropzone-content" id="wn-dropzone-empty">
+              <span class="dropzone-icon" data-icon="upload-cloud"></span>
+              <p class="dropzone-primary"><strong>Drag &amp; drop</strong> files here</p>
+              <p class="dropzone-secondary muted">or <u>click to browse</u> · or paste from clipboard (Ctrl/⌘+V)</p>
+              <p class="dropzone-types muted">PNG · JPG · GIF · WEBP · MP4 · WEBM · MOV</p>
             </div>
             <div class="media-preview-grid" id="wn-media-preview"></div>
           </div>
-          <small>Supports images, videos, and animated GIFs. Multiple files allowed.</small>
+          <div class="upload-progress hidden" id="wn-upload-progress">
+            <div class="upload-progress-bar" id="wn-upload-progress-bar"></div>
+            <span class="upload-progress-text" id="wn-upload-progress-text">Uploading…</span>
+          </div>
         </div>
-        
-        <label style="margin-top:16px">Or Image URL (legacy)
-          <input type="text" id="wn-image-url" placeholder="https://example.com/image.png" />
-          <small>Optional image URL. Leave empty for no image.</small>
-        </label>
-        <div style="margin-top:16px; display:flex; gap:10px; flex-wrap:wrap">
-          <button type="button" id="wn-add-btn" class="primary">➕ Add Entry</button>
+
+        <!-- Target environments (create mode only) — pick one or many -->
+        <div class="apply-envs" id="wn-target-envs">
+          <div class="apply-envs-head">
+            <label><span data-icon="globe"></span> Create on environments <span class="muted">(select one or more)</span></label>
+            <div class="apply-envs-quick">
+              <button type="button" class="ghost tiny-btn" id="wn-target-all">All envs</button>
+              <button type="button" class="ghost tiny-btn" id="wn-target-current">Current only</button>
+            </div>
+          </div>
+          <div class="apply-envs-list" id="wn-target-list"></div>
+          <small class="muted">The entry will be created on every selected environment.</small>
+        </div>
+
+        <div class="wn-form-actions">
+          <button type="button" id="wn-add-btn" class="primary"><span data-icon="plus"></span> Add Entry</button>
+          <button type="button" id="wn-update-btn" class="primary hidden"><span data-icon="save"></span> Update Entry</button>
+          <button type="button" id="wn-cancel-edit-btn" class="ghost hidden"><span data-icon="x"></span> Cancel edit</button>
           <button type="button" id="wn-clear-btn" class="ghost">Clear Form</button>
         </div>
         <p id="wn-form-error" class="error hidden"></p>
@@ -524,26 +539,37 @@
 
       <section class="card">
         <div class="card-head">
-          <h2>📋 Version Entries</h2>
+          <h2><span data-icon="list"></span> Version Entries</h2>
           <div class="user-actions">
-            <input type="search" id="wn-search" placeholder="Search versions..." />
+            <select id="wn-env-filter" class="env-filter-select" title="Filter by environment">
+              <!-- options filled in JS -->
+            </select>
+            <input type="search" id="wn-search" placeholder="Filter by version, title…" />
+            <select id="wn-version-filter" class="env-filter-select" title="Jump to a specific version">
+              <option value="">All versions</option>
+            </select>
+            <select id="wn-sort" class="env-filter-select" title="Sort entries">
+              <option value="order">Manual order</option>
+              <option value="version-desc">Version — newest first</option>
+              <option value="version-asc">Version — oldest first</option>
+            </select>
             <label class="switch tiny">
               <input type="checkbox" id="wn-filter-active" checked /><span class="track"></span><span class="switch-label">Active Only</span>
             </label>
             <button type="button" id="wn-refresh" class="ghost">Refresh</button>
           </div>
         </div>
-        <p class="hint">Entries for the current environment. Drag to reorder by order value. Click delete to remove an entry.</p>
+        <p class="hint" id="wn-list-hint">Entries for the selected environment. In <b>Manual order</b> mode use the ▲▼ arrows on each card to reorder — the new order is saved instantly.</p>
         <div id="wn-list" class="wn-list"><span class="loading">Loading entries…</span></div>
       </section>
 
       <section class="card">
-        <h2>🌐 Bulk Operations</h2>
+        <h2><span data-icon="globe"></span> Bulk Operations</h2>
         <p class="hint">Synchronize What's New entries across all configured environments.</p>
         <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:10px">
-          <button type="button" id="wn-sync-all" class="secondary">🔄 Sync All Envs</button>
-          <button type="button" id="wn-export" class="ghost">📤 Export JSON</button>
-          <button type="button" id="wn-import-toggle" class="ghost">📥 Import JSON</button>
+          <button type="button" id="wn-sync-all" class="secondary"><span data-icon="refresh"></span> Sync All Envs</button>
+          <button type="button" id="wn-export" class="ghost"><span data-icon="upload"></span> Export JSON</button>
+          <button type="button" id="wn-import-toggle" class="ghost"><span data-icon="download"></span> Import JSON</button>
         </div>
         <div id="wn-import-area" class="hidden" style="margin-top:10px">
           <textarea id="wn-import-data" rows="6" placeholder='Paste JSON array of entries here...' style="width:100%"></textarea>
@@ -559,10 +585,26 @@
     <!-- Sticky action bar (activities + events tabs) -->
     <div class="actionbar hidden" id="activities-actionbar">
       <div class="actionbar-inner">
-        <span class="actionbar-hint" id="actionbar-hint">Ready.</span>
+        <div class="actionbar-left">
+          <span class="actionbar-hint" id="actionbar-hint">Ready.</span>
+          <div class="env-multi" id="save-env-multi">
+            <button type="button" class="env-multi-btn" id="save-env-btn" aria-haspopup="true" aria-expanded="false" title="Choose which environments to save these settings to">
+              <span data-icon="globe"></span> <span id="save-env-summary">Current env</span> <span class="caret" data-icon="chevron-down"></span>
+            </button>
+            <div class="env-multi-menu up hidden" id="save-env-menu">
+              <div class="env-multi-head">Save settings to</div>
+              <div class="env-multi-list" id="save-env-list"></div>
+              <div class="env-multi-actions">
+                <button type="button" class="ghost tiny-btn" id="save-env-all">All envs</button>
+                <button type="button" class="ghost tiny-btn" id="save-env-current">Current only</button>
+              </div>
+              <p class="env-multi-note muted">The same settings are written to every selected environment.</p>
+            </div>
+          </div>
+        </div>
         <div class="actionbar-buttons">
-          <button type="button" id="run-now" class="secondary">▶ Run activities now</button>
-          <button type="button" id="save" class="primary" title="Saves to disk — settings persist across restarts">💾 Save all settings</button>
+          <button type="button" id="run-now" class="secondary"><span data-icon="play"></span> Run activities now</button>
+          <button type="button" id="save" class="primary" title="Saves to disk — settings persist across restarts"><span data-icon="save"></span> Save settings</button>
         </div>
       </div>
     </div>
@@ -571,7 +613,7 @@
     <main class="logs-wrap">
       <section class="card">
         <div class="card-head">
-          <h2>📜 API &amp; run log</h2>
+          <h2><span data-icon="terminal"></span> API &amp; run log <span class="log-count-badge" id="log-count">0</span></h2>
           <div class="user-actions">
             <label class="log-filter">Filter
               <select id="log-filter">
@@ -594,6 +636,6 @@
       </section>
     </main>
 
-    <script src="app.js?v=9"></script>
+    <script src="app.js?v=14"></script>
   </body>
 </html>

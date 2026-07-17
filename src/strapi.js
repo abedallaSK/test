@@ -132,18 +132,23 @@ export async function createEvent(env, data) {
 }
 
 /**
- * Download an image and upload it to Strapi's media library. Returns the new
- * file id (for linking to a media field like eventImage). Uses multipart, so
- * it bypasses the JSON `request()` helper. Logs the upload call.
+ * Upload a single file buffer to Strapi's media library. Returns the new
+ * file id (for linking to a media field like eventImage or image). Uses
+ * multipart, so it bypasses the JSON `request()` helper. Logs the upload call.
+ *
+ * @param {Object} env       - Strapi environment (with token).
+ * @param {Buffer|Uint8Array|Blob} buffer - File contents.
+ * @param {string} filename  - Original filename (preserves extension for mime sniffer).
+ * @param {string} [mimetype] - Content-Type. Optional, defaults to binary/octet-stream.
  */
-export async function uploadImageFromUrl(env, imageUrl, filename = 'event.jpg') {
+export async function uploadFile(env, buffer, filename, mimetype) {
   assertEnv(env);
+  if (!buffer) throw new Error('uploadFile: buffer is required');
+  if (!filename) throw new Error('uploadFile: filename is required');
 
-  const imgRes = await fetch(imageUrl, { redirect: 'follow' });
-  if (!imgRes.ok) throw new Error(`image download failed (${imgRes.status})`);
-  const arrayBuf = await imgRes.arrayBuffer();
-  const contentType = imgRes.headers.get('content-type') || 'image/jpeg';
-  const blob = new Blob([arrayBuf], { type: contentType });
+  const blob = buffer instanceof Blob
+    ? buffer
+    : new Blob([buffer], { type: mimetype || 'application/octet-stream' });
 
   const form = new FormData();
   form.append('files', blob, filename);
@@ -156,9 +161,13 @@ export async function uploadImageFromUrl(env, imageUrl, filename = 'event.jpg') 
     body: form,
   });
   const ms = Date.now() - start;
-  const json = await res.json().catch(() => null);
 
-  log(res.ok ? 'api' : 'error', `[${env.name}] POST /api/upload → ${res.status} (${ms}ms)`, {
+  // Parse the body (JSON on success OR error) — but tolerate plain text too.
+  const text = await res.text();
+  let json = null;
+  try { json = text ? JSON.parse(text) : null; } catch { /* keep null */ }
+
+  log(res.ok ? 'api' : 'error', `[${env.name}] POST /api/upload (${filename}) → ${res.status} (${ms}ms)`, {
     api: true,
     env: env.id,
     envName: env.name,
@@ -169,11 +178,28 @@ export async function uploadImageFromUrl(env, imageUrl, filename = 'event.jpg') 
   });
 
   if (!res.ok) {
-    throw new Error(`upload failed (${res.status}): ${json?.error?.message || ''}`);
+    const detail = json?.error?.message || json?.message || text || `HTTP ${res.status}`;
+    throw new Error(`upload failed (${res.status}): ${detail}`);
   }
   const id = Array.isArray(json) ? json[0]?.id : json?.id;
   if (!id) throw new Error('upload returned no file id');
   return id;
+}
+
+/**
+ * Download an image and upload it to Strapi's media library. Returns the new
+ * file id (for linking to a media field like eventImage). Uses multipart, so
+ * it bypasses the JSON `request()` helper. Logs the upload call.
+ */
+export async function uploadImageFromUrl(env, imageUrl, filename = 'event.jpg') {
+  assertEnv(env);
+
+  const imgRes = await fetch(imageUrl, { redirect: 'follow' });
+  if (!imgRes.ok) throw new Error(`image download failed (${imgRes.status})`);
+  const arrayBuf = await imgRes.arrayBuffer();
+  const contentType = imgRes.headers.get('content-type') || 'image/jpeg';
+  // Pass through to uploadFile so logging + error handling are identical.
+  return uploadFile(env, new Uint8Array(arrayBuf), filename, contentType);
 }
 
 /**
@@ -213,4 +239,31 @@ export async function fetchMediaLibrary(env, collection, options = {}) {
   
   const data = await request(env, 'GET', path);
   return data?.data || data || [];
+}
+
+/* ---------- What's New helpers (typed wrappers) ---------- */
+
+/**
+ * List all What's New entries for an environment, with media + image populated.
+ * Returns the raw array (id, documentId, attributes merged).
+ */
+export async function listWhatsNew(env) {
+  const data = await request(env, 'GET', '/whats-new?populate=*&pagination[pageSize]=100&sort=order:desc');
+  const list = data?.data || data || [];
+  return list.map((e) => ({ id: e.id, documentId: e.documentId, ...(e.attributes || e) }));
+}
+
+/** Create a new What's New entry. data = the plain payload (not wrapped). */
+export async function createWhatsNew(env, data) {
+  return request(env, 'POST', '/whats-new', { data });
+}
+
+/** Update an existing What's New entry by documentId. patch = the partial payload. */
+export async function updateWhatsNew(env, documentId, patch) {
+  return request(env, 'PUT', `/whats-new/${documentId}`, { data: patch });
+}
+
+/** Delete a What's New entry by documentId. */
+export async function deleteWhatsNew(env, documentId) {
+  return request(env, 'DELETE', `/whats-new/${documentId}`);
 }

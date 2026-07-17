@@ -17,7 +17,7 @@ import crypto from 'node:crypto';
 import { getConfig, updateConfig, ACTIVITY_TYPES } from './config.js';
 import { getLogs, log } from './logger.js';
 import { runOnce, reschedule } from './scheduler.js';
-import { getUsers, getDojos, getPushTargets, uploadImageFromUrl, fetchMediaLibrary } from './strapi.js';
+import { getUsers, getDojos, getPushTargets, uploadImageFromUrl, uploadFile, fetchMediaLibrary, listWhatsNew, createWhatsNew, updateWhatsNew, deleteWhatsNew } from './strapi.js';
 import { sendExpoPush, isExpoPushToken } from './expo.js';
 import { listEnvironments, resolveEnv, defaultEnvId, addEnvironment, removeEnvironment } from './environments.js';
 import { statePath } from './store.js';
@@ -27,7 +27,7 @@ const PORT = process.env.PORT || 3000;
 
 // Bumped whenever server-side behaviour changes. Surfaced to the UI so you can
 // confirm the RUNNING process (not just static files) is the latest.
-const BUILD = 'build-8 (persistence + env manager + 2 event schedules)';
+const BUILD = 'build-9 (whatsnew: real error messages + /api/upload + per-env listing)';
 
 // Simple session-based auth
 const sessions = new Map(); // token -> { username, createdAt }
@@ -55,6 +55,67 @@ function envIdFrom(req) {
 
 const app = express();
 app.use(express.json());
+
+/**
+ * Minimal multipart/form-data parser. Returns an array of parts:
+ *   { name, filename, contentType, data: Buffer }
+ * Only handles what's needed for /api/upload (a few files, no nested fields).
+ */
+function parseMultipart(req) {
+  return new Promise((resolve, reject) => {
+    const ctype = req.headers['content-type'] || '';
+    const m = ctype.match(/boundary=(?:"([^"]+)"|([^;]+))/i);
+    if (!m) return reject(new Error('No multipart boundary in Content-Type'));
+    const dashBoundary = '--' + (m[1] || m[2]).trim();
+
+    const chunks = [];
+    req.on('data', (c) => chunks.push(c));
+    req.on('error', reject);
+    req.on('end', () => {
+      try {
+        const buf = Buffer.concat(chunks);
+        const parts = [];
+        let pos = buf.indexOf(dashBoundary);
+        while (pos !== -1) {
+          pos += dashBoundary.length;
+          // End of multipart: boundary followed by --
+          if (buf.slice(pos, pos + 2).toString() === '--') break;
+          // Skip optional \r\n
+          if (buf.slice(pos, pos + 2).toString() === '\r\n') pos += 2;
+
+          const headerEnd = buf.indexOf('\r\n\r\n', pos);
+          if (headerEnd === -1) break;
+          const headerText = buf.slice(pos, headerEnd).toString();
+          pos = headerEnd + 4;
+
+          const nextStart = buf.indexOf(dashBoundary, pos);
+          if (nextStart === -1) break;
+          // Strip the trailing \r\n before the boundary
+          const dataEnd = nextStart - 2;
+
+          const headers = {};
+          headerText.split('\r\n').forEach((line) => {
+            const i = line.indexOf(':');
+            if (i === -1) return;
+            headers[line.slice(0, i).trim().toLowerCase()] = line.slice(i + 1).trim();
+          });
+          const cd = headers['content-disposition'] || '';
+          const name = (cd.match(/name="([^"]+)"/) || [])[1] || null;
+          const filename = (cd.match(/filename="([^"]*)"/) || [])[1] || null;
+          parts.push({
+            name,
+            filename,
+            contentType: headers['content-type'] || 'application/octet-stream',
+            data: buf.slice(pos, dataEnd),
+          });
+          pos = nextStart;
+        }
+        resolve(parts);
+      } catch (err) { reject(err); }
+    });
+  });
+}
+
 app.use(
   express.static(path.join(__dirname, '..', 'public'), {
     etag: true,
@@ -102,6 +163,34 @@ app.use('/api', (req, res, next) => {
   // login/logout/auth/health already handled above.
   if (isAuthenticated(req)) return next();
   return res.status(401).json({ error: 'Authentication required' });
+});
+
+/**
+ * Multipart file upload — for the What's New drag-and-drop zone.
+ * Accepts one or more files under the field name "files" (or "file").
+ * Returns: [{ id, url, mime, name, size }] in Strapi order.
+ */
+app.post('/api/upload', async (req, res) => {
+  try {
+    const env = resolveEnv(envIdFrom(req));
+    const parts = await parseMultipart(req);
+    if (!parts.length) {
+      return res.status(400).json({ error: 'No files in upload.' });
+    }
+    const uploaded = [];
+    for (const p of parts) {
+      if (!p.filename) continue; // skip form fields with no file
+      const id = await uploadFile(env, p.data, p.filename, p.contentType);
+      uploaded.push({ id, mime: p.contentType, name: p.filename, size: p.data.length });
+    }
+    if (!uploaded.length) {
+      return res.status(400).json({ error: 'No files in upload (only form fields?).' });
+    }
+    res.json(uploaded);
+  } catch (err) {
+    log('error', `Upload failed: ${err.message}`);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 /** List configured environments (id + name only — never tokens). */
@@ -252,8 +341,8 @@ app.post('/api/upload-from-url', async (req, res) => {
 app.get('/api/whatsnew', async (req, res) => {
   try {
     const env = resolveEnv(envIdFrom(req));
-    const data = await fetchMediaLibrary(env, 'whats-new', { populate: '*' });
-    res.json(data);
+    const list = await listWhatsNew(env);
+    res.json(list);
   } catch (err) {
     log('error', `Fetch whatsnew failed: ${err.message}`);
     res.status(502).json({ error: err.message });
@@ -266,27 +355,28 @@ app.post('/api/whatsnew', async (req, res) => {
     const env = resolveEnv(envIdFrom(req));
     const { data } = req.body || {};
     if (!data || !data.version) return res.status(400).json({ error: 'version is required' });
-    
-    // If image is provided as a URL string, upload it first
-    if (typeof data.image === 'string' && data.image.startsWith('http')) {
-      const fileId = await uploadImageFromUrl(env, data.image, 'whats-new.jpg');
-      data.image = fileId;
+
+    // Legacy: if image is provided as a URL string, upload it first.
+    if (typeof data.image === 'string' && /^https?:\/\//i.test(data.image)) {
+      data.image = await uploadImageFromUrl(env, data.image, 'whats-new.jpg');
     }
-    
-    const result = await fetch(`${env.apiBase}/whats-new`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${env.token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ data }),
-    }).then(r => r.json());
-    
-    log('api', `[${env.name}] POST /api/whatsnew → created`, { env: env.id, envName: env.name, version: data.version });
+
+    const result = await createWhatsNew(env, data);
+    log('api', `[${env.name}] Create whatsnew v${data.version} OK`, { env: env.id, version: data.version });
     res.json(result);
   } catch (err) {
-    log('error', `Create whatsnew failed: ${err.message}`);
-    res.status(500).json({ error: err.message });
+    // Surface Strapi's real error (e.g. 405 / "Method not allowed" because
+    // the role lacks create permission). Without this, the client got
+    // "Unexpected token M, Method Not Allowed is not valid JSON".
+    const msg = String(err.message || 'Create whatsnew failed');
+    const isPerm = /method not allowed|forbidden|not allowed/i.test(msg);
+    log('error', `Create whatsnew failed: ${msg}`);
+    res.status(isPerm ? 403 : 500).json({
+      error: msg,
+      hint: isPerm
+        ? 'The Strapi role for this API token does not allow CREATE on the "whats-new" content type. Open Strapi → Settings → Users & Permissions → Roles → edit the role used by your token → enable "create" under "Whats-new".'
+        : undefined,
+    });
   }
 });
 
@@ -296,27 +386,25 @@ app.put('/api/whatsnew/:documentId', async (req, res) => {
     const env = resolveEnv(envIdFrom(req));
     const { documentId } = req.params;
     const { data } = req.body || {};
-    
-    // If image is provided as a URL string, upload it first
-    if (data && typeof data.image === 'string' && data.image.startsWith('http')) {
-      const fileId = await uploadImageFromUrl(env, data.image, 'whats-new.jpg');
-      data.image = fileId;
+    if (!data) return res.status(400).json({ error: 'data is required' });
+
+    if (typeof data.image === 'string' && /^https?:\/\//i.test(data.image)) {
+      data.image = await uploadImageFromUrl(env, data.image, 'whats-new.jpg');
     }
-    
-    const result = await fetch(`${env.apiBase}/whats-new/${documentId}`, {
-      method: 'PUT',
-      headers: {
-        Authorization: `Bearer ${env.token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ data }),
-    }).then(r => r.json());
-    
-    log('api', `[${env.name}] PUT /api/whatsnew/${documentId} → updated`, { env: env.id, envName: env.name });
+
+    const result = await updateWhatsNew(env, documentId, data);
+    log('api', `[${env.name}] Update whatsnew ${documentId} OK`, { env: env.id });
     res.json(result);
   } catch (err) {
-    log('error', `Update whatsnew failed: ${err.message}`);
-    res.status(500).json({ error: err.message });
+    const msg = String(err.message || 'Update whatsnew failed');
+    const isPerm = /method not allowed|forbidden|not allowed/i.test(msg);
+    log('error', `Update whatsnew failed: ${msg}`);
+    res.status(isPerm ? 403 : 500).json({
+      error: msg,
+      hint: isPerm
+        ? 'The Strapi role for this API token does not allow UPDATE on the "whats-new" content type. Open Strapi → Settings → Users & Permissions → Roles → edit the role used by your token → enable "update" under "Whats-new".'
+        : undefined,
+    });
   }
 });
 
@@ -325,15 +413,8 @@ app.delete('/api/whatsnew/:documentId', async (req, res) => {
   try {
     const env = resolveEnv(envIdFrom(req));
     const { documentId } = req.params;
-    
-    await fetch(`${env.apiBase}/whats-new/${documentId}`, {
-      method: 'DELETE',
-      headers: {
-        Authorization: `Bearer ${env.token}`,
-      },
-    });
-    
-    log('api', `[${env.name}] DELETE /api/whatsnew/${documentId} → deleted`, { env: env.id, envName: env.name });
+    await deleteWhatsNew(env, documentId);
+    log('api', `[${env.name}] Delete whatsnew ${documentId} OK`, { env: env.id });
     res.json({ ok: true });
   } catch (err) {
     log('error', `Delete whatsnew failed: ${err.message}`);

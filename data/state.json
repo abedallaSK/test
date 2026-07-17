@@ -3,8 +3,14 @@
     {
       "id": "default",
       "name": "Default",
-      "url": "https://admin.dojospaces.com/api",
-      "token": "e6508c8e94f97f8e8835ebacdf5894c49b7ef99f2aa63a4763bb52659ebf5939d5b9cf9bb3602f995fc474721040de4631ac82fc76c4e887031d93d734faddffa7e0406e7ed6b8f3998e87da974a1dd0218db6543424dd68ae26eaa338a0c514fa84ee0c049e9a5ca2f4f86ce0bbb22aee7be9cbf1962b4ebbc84b38bb65002b"
+      "url": "https://api.dojospaces.com",
+      "token": "3182000d5c9591ea53e163f077e031e1d9d7308cdeec7e78342a4974fa604220f9ee5bfbc31d9fd2dee5767b6a21afb983f591393c91b91f4b558f9396e94eb0df5dc6b7dd1a3449f8aabde48a173ace470934cb3350e2c7efe29144c54afd3b270b5df871c8b6b87b913ef52909c55cb131df08d2b630b28e7728cb88363471"
+    },
+    {
+      "id": "test",
+      "name": "test",
+      "url": "https://admin.dojospaces.com",
+      "token": "9ecef4d4fa13659ac4cafac6b3d86e430525e032d89409995d9946453c2f3fe71ec7b4db67e405e0ce997037f11318f44b5f02b167f0656d8aa945af84f0c22db11b5bbdad8535b6e169ff38db58afab99fcdd958af164d4947a29060a55bc4ed2c652d36f8222f255fcc6085c3614c7be56ca24701aadfd0f362ea7ccb63400"
     }
   ],
   "configs": {
@@ -53,6 +59,61 @@
         "A guided session designed for beginners and pros alike. See you there!"
       ],
       "selectedUserIds": []
+    },
+    "test": {
+      "activitiesEnabled": true,
+      "activityCron": "*/30 * * * *",
+      "eventsTrueEnabled": true,
+      "eventsTrueCron": "0 */6 * * *",
+      "eventsTrueMin": 1,
+      "eventsTrueMax": 2,
+      "eventsFalseEnabled": true,
+      "eventsFalseCron": "0 */12 * * *",
+      "eventsFalseMin": 1,
+      "eventsFalseMax": 1,
+      "minDurationMinutes": 30,
+      "maxDurationMinutes": 60,
+      "minMembers": 1,
+      "maxMembers": 3,
+      "minActivities": 1,
+      "maxActivities": 1,
+      "activityType": "CUSTOM",
+      "autoEnd": true,
+      "attachDojo": true,
+      "eventFutureMinDays": 1,
+      "eventFutureMaxDays": 30,
+      "eventDurationMinutes": 120,
+      "eventAttachPhoto": true,
+      "eventAttachDojo": true,
+      "eventTitles": [
+        "Sunrise Yoga Session",
+        "Community Run",
+        "Meditation Meetup",
+        "Beach Workout",
+        "Evening Cycling",
+        "Group Hike",
+        "Martial Arts Class",
+        "Mindfulness Workshop",
+        "Street Basketball",
+        "Morning Stretch"
+      ],
+      "eventDescriptions": [
+        "Join us for a refreshing session open to all levels — bring water and good vibes!",
+        "Meet fellow members for a fun group activity in the heart of the city.",
+        "A relaxing gathering to recharge body and mind. Everyone is welcome.",
+        "Let's move together, stay healthy, and make new friends along the way.",
+        "A guided session designed for beginners and pros alike. See you there!"
+      ],
+      "selectedUserIds": [
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ]
     }
   }
 }
