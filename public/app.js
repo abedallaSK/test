@@ -3,11 +3,30 @@
 const $ = (id) => document.getElementById(id);
 
 let allUsers = [];
-const selected = new Set(); // activity pool
+const selected = new Set(); // activity pool (per current env)
 const notifSelected = new Set(); // notification recipients
 let savedSnapshot = null;
 let logTimer = null;
 let authToken = localStorage.getItem('authToken') || null;
+
+let environments = []; // [{id, name}]
+let currentEnv = localStorage.getItem('env') || null;
+
+// Source of truth for the list editors.
+const listState = { eventTitles: [], eventDescriptions: [] };
+
+/* ---------- theme ---------- */
+
+const THEMES = ['dark', 'light', 'dojo'];
+function applyTheme(name) {
+  const t = THEMES.includes(name) ? name : 'dark';
+  document.documentElement.dataset.theme = t;
+  localStorage.setItem('theme', t);
+  document.querySelectorAll('.theme-btn').forEach((b) => b.classList.toggle('active', b.dataset.themeValue === t));
+  const metaColors = { dark: '#0d0f16', light: '#f4f6fb', dojo: '#14100e' };
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.content = metaColors[t];
+}
 
 /* ---------- helpers ---------- */
 
@@ -22,74 +41,55 @@ function banner(message, type = 'info') {
   }
 }
 
+function withEnv(path) {
+  if (!currentEnv) return path;
+  return path + (path.includes('?') ? '&' : '?') + 'env=' + encodeURIComponent(currentEnv);
+}
+
 async function api(path, options = {}) {
-  const headers = {
-    'Content-Type': 'application/json',
-    ...(options.headers || {}),
-  };
-  if (authToken) {
-    headers['Authorization'] = `Bearer ${authToken}`;
-  }
-  
+  const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+  if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
   const res = await fetch(path, { ...options, headers });
-  
-  // Handle 401 by redirecting to login
-  if (res.status === 401) {
-    logout();
-    throw new Error('Session expired');
-  }
-  
+  if (res.status === 401) { logout(); throw new Error('Session expired'); }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
   return data;
 }
 
 async function login(username, password) {
-  try {
-    const res = await fetch('/api/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Login failed');
-    authToken = data.token;
-    localStorage.setItem('authToken', authToken);
-    return true;
-  } catch (err) {
-    throw err;
-  }
+  const res = await fetch('/api/login', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Login failed');
+  authToken = data.token;
+  localStorage.setItem('authToken', authToken);
+  return true;
 }
 
 async function logout() {
+  const token = authToken;
   authToken = null;
   localStorage.removeItem('authToken');
-  try {
-    await fetch('/api/logout', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${authToken}` },
-    });
-  } catch {}
+  try { await fetch('/api/logout', { method: 'POST', headers: { Authorization: `Bearer ${token}` } }); } catch {}
   showLoginScreen();
 }
 
 async function checkAuth() {
   if (!authToken) return false;
   try {
-    const res = await fetch('/api/auth', {
-      headers: { 'Authorization': `Bearer ${authToken}` },
-    });
+    const res = await fetch('/api/auth', { headers: { Authorization: `Bearer ${authToken}` } });
     const data = await res.json();
     return data.authenticated;
-  } catch {
-    return false;
-  }
+  } catch { return false; }
 }
 
 function showLoginScreen() {
   $('login-screen').classList.remove('hidden');
   $('tabs').classList.add('hidden');
-  document.querySelectorAll('main').forEach(el => el.classList.add('hidden'));
+  document.querySelectorAll('main').forEach((el) => el.classList.add('hidden'));
+  $('activities-actionbar').classList.add('hidden');
   const logsWrap = document.querySelector('.logs-wrap');
   if (logsWrap) logsWrap.classList.add('hidden');
   $('logout-btn').classList.add('hidden');
@@ -98,7 +98,6 @@ function showLoginScreen() {
 function hideLoginScreen() {
   $('login-screen').classList.add('hidden');
   $('tabs').classList.remove('hidden');
-  $('activities-actionbar').classList.remove('hidden');
   const logsWrap = document.querySelector('.logs-wrap');
   if (logsWrap) logsWrap.classList.remove('hidden');
   $('logout-btn').classList.remove('hidden');
@@ -116,47 +115,28 @@ function cronToHuman(expr) {
   return `cron: ${c}`;
 }
 
-/** Parse cron expression and return detailed breakdown */
 function parseCronDetails(expr) {
-  const c = (expr || '').trim();
-  const parts = c.split(/\s+/);
+  const parts = (expr || '').trim().split(/\s+/);
   if (parts.length !== 5) return null;
-  
   const [minute, hour, dayOfMonth, month, dayOfWeek] = parts;
-  
-  const explainField = (field, name, min, max) => {
-    if (field === '*') return `${name}: Every value (${min}-${max})`;
-    if (field.startsWith('*/')) {
-      const step = field.slice(2);
-      return `${name}: Every ${step} ${name.toLowerCase()} (starting at ${min})`;
-    }
-    if (field.includes('-')) {
-      const [start, end] = field.split('-').map(Number);
-      return `${name}: From ${start} to ${end}`;
-    }
-    if (field.includes(',')) {
-      return `${name}: Specific values: ${field}`;
-    }
-    return `${name}: At ${field}`;
+  const explain = (field, name) => {
+    if (field === '*') return `${name}: every`;
+    if (field.startsWith('*/')) return `${name}: every ${field.slice(2)}`;
+    if (field.includes('-')) { const [s, e] = field.split('-'); return `${name}: ${s}–${e}`; }
+    if (field.includes(',')) return `${name}: ${field}`;
+    return `${name}: at ${field}`;
   };
-  
   return [
-    explainField(minute, 'Minute', 0, 59),
-    explainField(hour, 'Hour', 0, 23),
-    explainField(dayOfMonth, 'Day of month', 1, 31),
-    explainField(month, 'Month', 1, 12),
-    explainField(dayOfWeek, 'Day of week', 0, 6),
+    explain(minute, 'Min'), explain(hour, 'Hour'), explain(dayOfMonth, 'Day'),
+    explain(month, 'Month'), explain(dayOfWeek, 'Weekday'),
   ];
 }
 
-function renderCronDetails(expr) {
+function renderCronDetails(containerId, expr) {
   const details = parseCronDetails(expr);
-  const container = $('cron-details');
-  if (!details) {
-    container.innerHTML = '<span class="muted">Invalid cron expression</span>';
-    return;
-  }
-  container.innerHTML = details.map(d => `<div>${d}</div>`).join('');
+  const el = $(containerId);
+  el.innerHTML = details ? details.map((d) => `<div>${d}</div>`).join('')
+    : '<span class="muted">Invalid cron expression</span>';
 }
 
 const tokenCount = () => allUsers.filter((u) => u.hasToken).length;
@@ -164,37 +144,33 @@ const tokenCount = () => allUsers.filter((u) => u.hasToken).length;
 /* ---------- tabs ---------- */
 
 let activeTab = 'activities';
-
 function switchTab(name) {
   activeTab = name;
-  document.querySelectorAll('.tab').forEach((t) =>
-    t.classList.toggle('active', t.dataset.tab === name),
-  );
+  document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
   $('panel-activities').classList.toggle('hidden', name !== 'activities');
   $('panel-events').classList.toggle('hidden', name !== 'events');
   $('panel-notify').classList.toggle('hidden', name !== 'notify');
-  // Save/Run bar applies to the whole config (activities + events).
   $('activities-actionbar').classList.toggle('hidden', name === 'notify');
-  // Run now is scoped to the tab you're on.
-  $('run-now').textContent =
-    name === 'events' ? '▶ Run events now (test)' : '▶ Run activities now (test)';
+  $('run-now').textContent = name === 'events' ? '▶ Run events now' : '▶ Run activities now';
 }
 
-/* ---------- current form state (activities) ---------- */
-
-function linesToArray(text) {
-  return (text || '')
-    .split('\n')
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
+/* ---------- form state ---------- */
 
 function formState() {
   return {
-    enabled: $('enabled').checked,
-    cron: $('cron').value.trim(),
-    // activities
+    // activities schedule
     activitiesEnabled: $('activitiesEnabled').checked,
+    activityCron: $('activityCron').value.trim(),
+    // events schedules
+    eventsTrueEnabled: $('eventsTrueEnabled').checked,
+    eventsTrueCron: $('eventsTrueCron').value.trim(),
+    eventsTrueMin: parseInt($('eventsTrueMin').value, 10) || 0,
+    eventsTrueMax: parseInt($('eventsTrueMax').value, 10) || 0,
+    eventsFalseEnabled: $('eventsFalseEnabled').checked,
+    eventsFalseCron: $('eventsFalseCron').value.trim(),
+    eventsFalseMin: parseInt($('eventsFalseMin').value, 10) || 0,
+    eventsFalseMax: parseInt($('eventsFalseMax').value, 10) || 0,
+    // activity settings
     minDurationMinutes: parseInt($('minDuration').value, 10) || 1,
     maxDurationMinutes: parseInt($('maxDuration').value, 10) || 1,
     minMembers: parseInt($('minMembers').value, 10) || 0,
@@ -204,18 +180,14 @@ function formState() {
     activityType: $('activityType').value,
     autoEnd: $('autoEnd').checked,
     attachDojo: $('attachDojo').checked,
-    // events
-    eventsEnabled: $('eventsEnabled').checked,
-    minEvents: parseInt($('minEvents').value, 10) || 0,
-    maxEvents: parseInt($('maxEvents').value, 10) || 0,
-    eventIsEventRatio: parseInt($('eventIsEventRatio').value, 10) || 0,
+    // shared event settings
     eventDurationMinutes: parseInt($('eventDurationMinutes').value, 10) || 1,
     eventFutureMinDays: parseInt($('eventFutureMinDays').value, 10) || 0,
     eventFutureMaxDays: parseInt($('eventFutureMaxDays').value, 10) || 0,
     eventAttachPhoto: $('eventAttachPhoto').checked,
     eventAttachDojo: $('eventAttachDojo').checked,
-    eventTitles: linesToArray($('eventTitles').value),
-    eventDescriptions: linesToArray($('eventDescriptions').value),
+    eventTitles: [...listState.eventTitles],
+    eventDescriptions: [...listState.eventDescriptions],
     selectedUserIds: [...selected].sort((a, b) => a - b),
   };
 }
@@ -223,42 +195,45 @@ const isDirty = () => savedSnapshot !== null && JSON.stringify(formState()) !== 
 
 function refreshUi() {
   const s = formState();
+  const anyOn = s.activitiesEnabled || s.eventsTrueEnabled || s.eventsFalseEnabled;
   const pill = $('status-pill');
-  pill.classList.toggle('on', s.enabled);
-  pill.classList.toggle('off', !s.enabled);
-  $('status-text').textContent = s.enabled ? 'Running on schedule' : 'Paused';
+  pill.classList.toggle('on', anyOn);
+  pill.classList.toggle('off', !anyOn);
+  $('status-text').textContent = anyOn ? 'On schedule' : 'Paused';
 
-  $('sum-state').textContent = s.enabled ? 'Enabled' : 'Disabled';
-  $('sum-state').className = 'stat-value ' + (s.enabled ? 'good' : 'warn');
-  $('sum-schedule').textContent = cronToHuman(s.cron);
-  $('sum-duration').textContent =
-    s.minDurationMinutes === s.maxDurationMinutes
-      ? `${s.minDurationMinutes} min`
-      : `${s.minDurationMinutes}–${s.maxDurationMinutes} min`;
-  $('sum-members').textContent =
-    s.minMembers === s.maxMembers ? `${s.minMembers}` : `${s.minMembers}–${s.maxMembers}`;
+  // activities summary
+  $('sum-state').textContent = s.activitiesEnabled ? 'Enabled' : 'Disabled';
+  $('sum-state').className = 'stat-value ' + (s.activitiesEnabled ? 'good' : 'warn');
+  $('sum-schedule').textContent = cronToHuman(s.activityCron);
+  $('sum-duration').textContent = s.minDurationMinutes === s.maxDurationMinutes
+    ? `${s.minDurationMinutes} min` : `${s.minDurationMinutes}–${s.maxDurationMinutes} min`;
+  $('sum-members').textContent = s.minMembers === s.maxMembers ? `${s.minMembers}` : `${s.minMembers}–${s.maxMembers}`;
   $('sum-pool').textContent = `${selected.size} selected`;
   $('sum-autoend').textContent = s.autoEnd ? 'Auto-end' : 'Stay active';
-  $('cron-human').textContent = `${cronToHuman(s.cron)} · Asia/Jerusalem time`;
-  
-  // Render cron details
-  renderCronDetails(s.cron);
+  $('act-cron-human').textContent = `${cronToHuman(s.activityCron)} · Asia/Jerusalem`;
+  renderCronDetails('act-cron-details', s.activityCron);
 
-  // events summary
-  $('esum-state').textContent = s.eventsEnabled ? 'Enabled' : 'Disabled';
-  $('esum-state').className = 'stat-value ' + (s.eventsEnabled ? 'good' : 'warn');
-  $('esum-count').textContent =
-    s.minEvents === s.maxEvents ? `${s.minEvents}` : `${s.minEvents}–${s.maxEvents}`;
-  $('esum-ratio').textContent = `${s.eventIsEventRatio}%`;
-  $('esum-window').textContent =
-    s.eventFutureMinDays === s.eventFutureMaxDays
-      ? `${s.eventFutureMinDays}d ahead`
-      : `${s.eventFutureMinDays}–${s.eventFutureMaxDays}d ahead`;
+  // events summary (two schedules)
+  $('esum-true-state').textContent = s.eventsTrueEnabled ? 'Enabled' : 'Disabled';
+  $('esum-true-state').className = 'stat-value ' + (s.eventsTrueEnabled ? 'good' : 'warn');
+  $('esum-true-sched').textContent = cronToHuman(s.eventsTrueCron);
+  $('esum-false-state').textContent = s.eventsFalseEnabled ? 'Enabled' : 'Disabled';
+  $('esum-false-state').className = 'stat-value ' + (s.eventsFalseEnabled ? 'good' : 'warn');
+  $('esum-false-sched').textContent = cronToHuman(s.eventsFalseCron);
+  $('esum-window').textContent = s.eventFutureMinDays === s.eventFutureMaxDays
+    ? `${s.eventFutureMinDays}d ahead` : `${s.eventFutureMinDays}–${s.eventFutureMaxDays}d ahead`;
   $('esum-photo').textContent = s.eventAttachPhoto ? 'On' : 'Off';
-  $('esum-pool').textContent = `${selected.size} selected`;
+  $('evt-cron-human').textContent = `${cronToHuman(s.eventsTrueCron)} · Asia/Jerusalem`;
+  $('evf-cron-human').textContent = `${cronToHuman(s.eventsFalseCron)} · Asia/Jerusalem`;
+  renderCronDetails('evt-cron-details', s.eventsTrueCron);
+  renderCronDetails('evf-cron-details', s.eventsFalseCron);
+
+  $('pool-counts').textContent =
+    `${listState.eventTitles.length} title(s) · ${listState.eventDescriptions.length} description(s)`;
 
   const dirty = isDirty();
   $('dirty-note').classList.toggle('hidden', !dirty);
+  $('edirty-note').classList.toggle('hidden', !dirty);
   $('save').classList.toggle('attention', dirty);
   $('actionbar-hint').textContent = dirty ? 'Unsaved changes' : 'All changes saved.';
 }
@@ -274,11 +249,8 @@ function renderUsers() {
   for (const u of list) box.appendChild(userRow(u, selected, updateCount, refreshUi));
   updateCount();
 }
-function updateCount() {
-  $('selected-count').textContent = `${selected.size} selected`;
-}
+function updateCount() { $('selected-count').textContent = `${selected.size} selected`; }
 
-/** Build a user row bound to a given selection Set. */
 function userRow(u, set, onCount, onChange, { tokenOnly = false } = {}) {
   const row = document.createElement('label');
   const disabled = tokenOnly && !u.hasToken;
@@ -294,8 +266,7 @@ function userRow(u, set, onCount, onChange, { tokenOnly = false } = {}) {
     ${badge}
     <span class="uid">#${u.id}</span>`;
   row.querySelector('input').addEventListener('change', (e) => {
-    if (e.target.checked) set.add(u.id);
-    else set.delete(u.id);
+    if (e.target.checked) set.add(u.id); else set.delete(u.id);
     row.classList.toggle('on', e.target.checked);
     onCount();
     if (onChange) onChange();
@@ -313,17 +284,11 @@ function renderNotifUsers() {
   let list = allUsers.filter((u) => !q || u.name.toLowerCase().includes(q));
   if (tokenOnly) list = list.filter((u) => u.hasToken);
   box.innerHTML = list.length ? '' : '<span class="loading">No matches.</span>';
-  for (const u of list)
-    box.appendChild(userRow(u, notifSelected, updateNotifCount, refreshNotify, { tokenOnly }));
+  for (const u of list) box.appendChild(userRow(u, notifSelected, updateNotifCount, refreshNotify, { tokenOnly }));
   updateNotifCount();
 }
-function updateNotifCount() {
-  $('notif-selected-count').textContent = `${notifSelected.size} selected`;
-}
-
-function currentNotifMode() {
-  return document.querySelector('input[name="notif-mode"]:checked').value;
-}
+function updateNotifCount() { $('notif-selected-count').textContent = `${notifSelected.size} selected`; }
+function currentNotifMode() { return document.querySelector('input[name="notif-mode"]:checked').value; }
 
 function refreshNotify() {
   const mode = currentNotifMode();
@@ -334,34 +299,29 @@ function refreshNotify() {
   allNote.classList.toggle('hidden', mode !== 'all');
   if (mode === 'all') allNote.textContent = `Will send to all ${total} user(s) that have a device token.`;
 
-  // count valid recipients
-  let recipients;
-  if (mode === 'all') recipients = total;
-  else recipients = [...notifSelected].filter((id) => allUsers.find((u) => u.id === id)?.hasToken).length;
+  let recipients = mode === 'all' ? total
+    : [...notifSelected].filter((id) => allUsers.find((u) => u.id === id)?.hasToken).length;
 
-  const hasMsg = $('notif-title').value.trim() || $('notif-body').value.trim();
-  $('notif-hint').textContent = !hasMsg
-    ? 'Compose a title or message.'
-    : `${recipients} recipient(s) with a token ready.`;
+  const title = $('notif-title').value.trim();
+  const body = $('notif-body').value.trim();
+  $('pp-title').textContent = title || 'Notification title';
+  $('pp-body').textContent = body || 'Your message preview…';
+
+  const hasMsg = title || body;
+  $('notif-hint').textContent = !hasMsg ? 'Compose a title or message.' : `${recipients} recipient(s) with a token ready.`;
   $('send-notif').disabled = !hasMsg || recipients === 0;
 }
 
 async function sendNotification() {
   const mode = currentNotifMode();
   const body = {
-    title: $('notif-title').value.trim(),
-    body: $('notif-body').value.trim(),
-    mode,
-    userIds: mode === 'selected' ? [...notifSelected] : [],
+    env: currentEnv, title: $('notif-title').value.trim(), body: $('notif-body').value.trim(),
+    mode, userIds: mode === 'selected' ? [...notifSelected] : [],
   };
   $('send-notif').disabled = true;
   banner('Sending notification…', 'info');
   try {
-    const r = await api('/api/notify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
+    const r = await api('/api/notify', { method: 'POST', body: JSON.stringify(body) });
     if (r.sent > 0)
       banner(`✓ Sent to ${r.sent} device(s). ${r.failed ? r.failed + ' failed. ' : ''}${r.skipped ? r.skipped + ' had no token.' : ''}`, 'success');
     else banner(`Nothing sent. ${r.skipped ? r.skipped + ' recipient(s) had no token.' : 'No valid recipients.'}`, 'error');
@@ -372,22 +332,100 @@ async function sendNotification() {
   refreshNotify();
 }
 
-/* ---------- schedule preset -> cron ---------- */
+/* ---------- schedule presets ---------- */
 
-function applyPreset() {
-  const preset = $('preset').value;
-  $('wrap-n').classList.toggle('hidden', !(preset === 'minutes' || preset === 'hours'));
-  $('wrap-time').classList.toggle('hidden', preset !== 'daily');
-  $('cron').readOnly = preset !== 'custom';
-  $('cron').classList.toggle('readonly', preset !== 'custom');
-  const n = Math.max(1, parseInt($('interval-n').value, 10) || 1);
-  if (preset === 'minutes') $('cron').value = `*/${n} * * * *`;
-  else if (preset === 'hours') $('cron').value = `0 */${n} * * *`;
-  else if (preset === 'daily') {
-    const [h, m] = ($('daily-time').value || '09:00').split(':');
-    $('cron').value = `${parseInt(m, 10)} ${parseInt(h, 10)} * * *`;
+function makeScheduler(prefix, cronId) {
+  const apply = () => {
+    const preset = $(`${prefix}-preset`).value;
+    $(`${prefix}-wrap-n`).classList.toggle('hidden', !(preset === 'minutes' || preset === 'hours'));
+    $(`${prefix}-wrap-time`).classList.toggle('hidden', preset !== 'daily');
+    const cronEl = $(cronId);
+    cronEl.readOnly = preset !== 'custom';
+    cronEl.classList.toggle('readonly', preset !== 'custom');
+    const n = Math.max(1, parseInt($(`${prefix}-interval-n`).value, 10) || 1);
+    if (preset === 'minutes') cronEl.value = `*/${n} * * * *`;
+    else if (preset === 'hours') cronEl.value = `0 */${n} * * *`;
+    else if (preset === 'daily') {
+      const [h, m] = ($(`${prefix}-daily-time`).value || '09:00').split(':');
+      cronEl.value = `${parseInt(m, 10)} ${parseInt(h, 10)} * * *`;
+    }
+    refreshUi();
+  };
+  $(`${prefix}-preset`).addEventListener('change', apply);
+  $(`${prefix}-interval-n`).addEventListener('input', apply);
+  $(`${prefix}-daily-time`).addEventListener('input', apply);
+}
+
+function resetPreset(prefix, cronId) {
+  $(`${prefix}-preset`).value = 'custom';
+  $(cronId).readOnly = false;
+  $(`${prefix}-wrap-n`).classList.add('hidden');
+  $(`${prefix}-wrap-time`).classList.add('hidden');
+}
+
+/* ---------- list editors (titles / descriptions) ---------- */
+
+function renderListEditor(editorId) {
+  const editor = $(editorId);
+  const field = editor.dataset.field;
+  const arr = listState[field];
+  const listBox = editor.querySelector('[data-list]');
+  const raw = editor.querySelector('[data-raw]');
+  raw.value = arr.join('\n');
+
+  if (!arr.length) {
+    listBox.innerHTML = '<div class="chips-empty">Nothing yet — add at least one entry.</div>';
+  } else {
+    listBox.innerHTML = '';
+    arr.forEach((text, i) => {
+      const chip = document.createElement('div');
+      chip.className = 'chip';
+      chip.innerHTML = `<span class="chip-text"></span><button type="button" class="chip-del" title="Remove">×</button>`;
+      chip.querySelector('.chip-text').textContent = text;
+      chip.querySelector('.chip-del').addEventListener('click', () => {
+        listState[field].splice(i, 1);
+        renderListEditor(editorId);
+        refreshUi();
+      });
+      listBox.appendChild(chip);
+    });
   }
   refreshUi();
+}
+
+function setupListEditor(editorId) {
+  const editor = $(editorId);
+  const field = editor.dataset.field;
+  const addInput = editor.querySelector('[data-add]');
+  const addBtn = editor.querySelector('[data-add-btn]');
+  const rawToggle = editor.querySelector('[data-toggle-raw]');
+  const raw = editor.querySelector('[data-raw]');
+  const listBox = editor.querySelector('[data-list]');
+  const addRow = editor.querySelector('.list-add');
+
+  const addEntries = () => {
+    const parts = addInput.value.split('\n').map((s) => s.trim()).filter(Boolean);
+    if (!parts.length) return;
+    for (const p of parts) if (!listState[field].includes(p)) listState[field].push(p);
+    addInput.value = '';
+    renderListEditor(editorId);
+  };
+  addBtn.addEventListener('click', addEntries);
+  addInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addEntries(); } });
+
+  rawToggle.addEventListener('click', () => {
+    const showRaw = raw.classList.contains('hidden');
+    raw.classList.toggle('hidden', !showRaw);
+    listBox.classList.toggle('hidden', showRaw);
+    addRow.classList.toggle('hidden', showRaw);
+    rawToggle.textContent = showRaw ? '⇄ List mode' : '⇄ Paste mode';
+    if (!showRaw) renderListEditor(editorId);
+  });
+
+  raw.addEventListener('input', () => {
+    listState[field] = raw.value.split('\n').map((s) => s.trim()).filter(Boolean);
+    refreshUi();
+  });
 }
 
 /* ---------- config load / save ---------- */
@@ -397,46 +435,54 @@ function fillActivityTypes(types, current) {
   sel.innerHTML = '';
   for (const t of types) {
     const opt = document.createElement('option');
-    opt.value = t;
-    opt.textContent = t;
+    opt.value = t; opt.textContent = t;
     if (t === current) opt.selected = true;
     sel.appendChild(opt);
   }
 }
 
 async function loadConfig() {
-  const cfg = await api('/api/config');
-  // Reflect the RUNNING server's build (not static files) so a stale, un-restarted
-  // process is obvious. Old servers don't return `build`.
+  const cfg = await api(withEnv('/api/config'));
   const tag = $('build-tag');
   if (tag) {
     tag.textContent = cfg.build ? `server: ${cfg.build}` : 'server: OLD — restart node!';
     tag.classList.toggle('stale', !cfg.build);
   }
-  $('enabled').checked = cfg.enabled;
-  $('cron').value = cfg.cron;
+  // schedules
+  $('activitiesEnabled').checked = !!cfg.activitiesEnabled;
+  $('activityCron').value = cfg.activityCron || '*/30 * * * *';
+  $('eventsTrueEnabled').checked = !!cfg.eventsTrueEnabled;
+  $('eventsTrueCron').value = cfg.eventsTrueCron || '0 */6 * * *';
+  $('eventsTrueMin').value = cfg.eventsTrueMin ?? 1;
+  $('eventsTrueMax').value = cfg.eventsTrueMax ?? 2;
+  $('eventsFalseEnabled').checked = !!cfg.eventsFalseEnabled;
+  $('eventsFalseCron').value = cfg.eventsFalseCron || '0 */12 * * *';
+  $('eventsFalseMin').value = cfg.eventsFalseMin ?? 1;
+  $('eventsFalseMax').value = cfg.eventsFalseMax ?? 1;
+  // activities
   $('minDuration').value = cfg.minDurationMinutes ?? 30;
   $('maxDuration').value = cfg.maxDurationMinutes ?? 60;
-  $('minMembers').value = cfg.minMembers;
-  $('maxMembers').value = cfg.maxMembers;
+  $('minMembers').value = cfg.minMembers ?? 1;
+  $('maxMembers').value = cfg.maxMembers ?? 3;
   $('minActivities').value = cfg.minActivities || 1;
   $('maxActivities').value = cfg.maxActivities || 1;
-  $('activitiesEnabled').checked = cfg.activitiesEnabled !== false;
   $('autoEnd').checked = cfg.autoEnd;
   $('attachDojo').checked = cfg.attachDojo;
-  // events
-  $('eventsEnabled').checked = !!cfg.eventsEnabled;
-  $('minEvents').value = cfg.minEvents ?? 1;
-  $('maxEvents').value = cfg.maxEvents ?? 2;
-  $('eventIsEventRatio').value = cfg.eventIsEventRatio ?? 50;
+  // shared event settings
   $('eventDurationMinutes').value = cfg.eventDurationMinutes ?? 120;
   $('eventFutureMinDays').value = cfg.eventFutureMinDays ?? 1;
   $('eventFutureMaxDays').value = cfg.eventFutureMaxDays ?? 30;
   $('eventAttachPhoto').checked = cfg.eventAttachPhoto !== false;
   $('eventAttachDojo').checked = cfg.eventAttachDojo !== false;
-  $('eventTitles').value = (cfg.eventTitles || []).join('\n');
-  $('eventDescriptions').value = (cfg.eventDescriptions || []).join('\n');
+  listState.eventTitles = [...(cfg.eventTitles || [])];
+  listState.eventDescriptions = [...(cfg.eventDescriptions || [])];
+  renderListEditor('titles-editor');
+  renderListEditor('descs-editor');
   fillActivityTypes(cfg.activityTypes || ['CUSTOM'], cfg.activityType);
+  resetPreset('act', 'activityCron');
+  resetPreset('evt', 'eventsTrueCron');
+  resetPreset('evf', 'eventsFalseCron');
+
   selected.clear();
   (cfg.selectedUserIds || []).forEach((id) => selected.add(id));
   updateCount();
@@ -446,31 +492,24 @@ async function loadConfig() {
 
 async function save() {
   try {
-    await api('/api/config', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(formState()),
-    });
+    await api('/api/config', { method: 'PUT', body: JSON.stringify({ env: currentEnv, ...formState() }) });
     savedSnapshot = JSON.stringify(formState());
     refreshUi();
-    banner('✓ Settings saved and schedule updated.', 'success');
+    banner('✓ Saved to disk — settings will persist across restarts.', 'success');
+    loadLogs();
   } catch (err) {
     banner(`Save failed: ${err.message}`, 'error');
   }
 }
 
-async function runNow(scope = 'activities') {
-  const kind = scope === 'events' ? 'event' : 'activity';
-  banner(`Running ${kind} test…`, 'info');
+async function runNow(scope) {
+  const label = scope === 'events' ? 'events' : 'activities';
+  banner(`Running ${label} test on ${envName()}…`, 'info');
   $('run-now').disabled = true;
   try {
-    const r = await api('/api/run-now', { method: 'POST', body: JSON.stringify({ scope }) });
+    const r = await api('/api/run-now', { method: 'POST', body: JSON.stringify({ env: currentEnv, scope }) });
     if (r.skipped) {
-      const why = r.reason === 'no-users'
-        ? 'select at least one user first'
-        : r.reason === 'nothing-enabled'
-          ? `enable ${kind}s first`
-          : r.reason;
+      const why = r.reason === 'no-users' ? 'select at least one user first' : r.reason;
       banner(`Skipped: ${why}.`, 'error');
     } else if (r.ok) {
       const parts = [];
@@ -486,6 +525,130 @@ async function runNow(scope = 'activities') {
   } finally {
     $('run-now').disabled = false;
   }
+}
+
+/* ---------- environments ---------- */
+
+function envName() {
+  return environments.find((e) => e.id === currentEnv)?.name || currentEnv || 'environment';
+}
+
+function toggleEnvMenu(forceOpen) {
+  const menu = $('env-menu');
+  const willOpen = forceOpen ?? menu.classList.contains('hidden');
+  menu.classList.toggle('hidden', !willOpen);
+  $('env-current-btn').setAttribute('aria-expanded', String(willOpen));
+  if (!willOpen) {
+    $('env-add-form').classList.add('hidden');
+    $('env-add-toggle').classList.remove('hidden');
+  }
+}
+
+function renderEnvMenu() {
+  $('env-current-name').textContent = envName();
+  const list = $('env-list');
+  list.innerHTML = '';
+  environments.forEach((e) => {
+    const item = document.createElement('div');
+    item.className = 'env-item' + (e.id === currentEnv ? ' current' : '');
+    const canDelete = environments.length > 1;
+    item.innerHTML =
+      `<span class="env-item-check">${e.id === currentEnv ? '✓' : ''}</span>` +
+      `<span class="env-item-name"></span>` +
+      (canDelete ? `<button type="button" class="env-item-del" title="Remove environment">×</button>` : '');
+    item.querySelector('.env-item-name').textContent = e.name;
+    item.addEventListener('click', (ev) => {
+      if (ev.target.closest('.env-item-del')) return;
+      if (e.id !== currentEnv) onEnvChange(e.id);
+      toggleEnvMenu(false);
+    });
+    const del = item.querySelector('.env-item-del');
+    if (del) del.addEventListener('click', (ev) => { ev.stopPropagation(); removeEnv(e); });
+    list.appendChild(item);
+  });
+}
+
+async function loadEnvironments() {
+  const data = await api('/api/environments');
+  environments = data.environments || [];
+  if (!environments.find((e) => e.id === currentEnv)) {
+    currentEnv = data.defaultEnv || environments[0]?.id || null;
+  }
+  if (currentEnv) localStorage.setItem('env', currentEnv);
+  renderEnvMenu();
+}
+
+async function removeEnv(e) {
+  if (!confirm(`Remove environment "${e.name}"? Its saved settings will be deleted.`)) return;
+  try {
+    const data = await api('/api/environments/' + encodeURIComponent(e.id), { method: 'DELETE' });
+    environments = data.environments || [];
+    if (!environments.find((x) => x.id === currentEnv)) {
+      currentEnv = data.defaultEnv || environments[0]?.id || null;
+    }
+    if (currentEnv) localStorage.setItem('env', currentEnv);
+    renderEnvMenu();
+    banner(`Removed ${e.name}.`, 'success');
+    await loadEnvData();
+  } catch (err) {
+    banner(`Remove failed: ${err.message}`, 'error');
+  }
+}
+
+async function addEnv(ev) {
+  ev.preventDefault();
+  const name = $('env-add-name').value.trim();
+  const url = $('env-add-url').value.trim();
+  const token = $('env-add-token').value.trim();
+  const err = $('env-add-err');
+  err.classList.add('hidden');
+  try {
+    const data = await api('/api/environments', { method: 'POST', body: JSON.stringify({ name, url, token }) });
+    environments = data.environments || [];
+    currentEnv = data.added?.id || currentEnv;
+    localStorage.setItem('env', currentEnv);
+    $('env-add-name').value = '';
+    $('env-add-url').value = '';
+    $('env-add-token').value = '';
+    renderEnvMenu();
+    toggleEnvMenu(false);
+    banner(`✓ Added environment "${data.added?.name}".`, 'success');
+    await loadEnvData();
+  } catch (e) {
+    err.textContent = e.message;
+    err.classList.remove('hidden');
+  }
+}
+
+async function onEnvChange(id) {
+  currentEnv = id;
+  localStorage.setItem('env', id);
+  renderEnvMenu();
+  banner(`Switched to ${envName()}.`, 'info');
+  await loadEnvData();
+}
+
+async function loadEnvData() {
+  try {
+    await loadConfig();
+  } catch (err) {
+    banner(`Could not load config: ${err.message}`, 'error');
+  }
+  try {
+    allUsers = await api(withEnv('/api/users'));
+    [...selected].forEach((id) => { if (!allUsers.find((u) => u.id === id)) selected.delete(id); });
+    notifSelected.clear();
+    renderUsers();
+    renderNotifUsers();
+    refreshUi();
+    refreshNotify();
+  } catch (err) {
+    const msg = `⚠ Failed to load users for ${envName()}: ${err.message}. Check the environment's URL / token.`;
+    allUsers = [];
+    $('users').innerHTML = `<span class="loading err">${msg}</span>`;
+    $('notif-users').innerHTML = `<span class="loading err">${msg}</span>`;
+  }
+  loadLogs();
 }
 
 /* ---------- logs ---------- */
@@ -506,23 +669,22 @@ function logDetail(e) {
 
 async function loadLogs() {
   try {
-    const logs = await api('/api/logs');
+    const path = $('log-env-only').checked ? withEnv('/api/logs') : '/api/logs';
+    const logs = await api(path);
     const filter = $('log-filter').value;
     const shown = filter === 'all' ? logs : logs.filter((e) => e.level === filter);
     const ul = $('logs');
-    if (!shown.length) {
-      ul.innerHTML = '<li class="muted">No matching log entries.</li>';
-      return;
-    }
+    if (!shown.length) { ul.innerHTML = '<li class="muted">No matching log entries.</li>'; return; }
     ul.innerHTML = '';
     for (const e of shown) {
       const li = document.createElement('li');
       li.className = `log ${e.level}`;
       const t = new Date(e.time).toLocaleTimeString();
       const detail = logDetail(e);
+      const envTag = e.envName ? `<span class="log-env">${e.envName}</span>` : '';
       li.innerHTML =
         `<span class="log-badge">${e.level}</span>` +
-        `<span class="log-time">${t}</span>` +
+        `<span class="log-time">${t}</span>` + envTag +
         `<span class="log-msg">${e.message}${detail ? ` <span class="log-detail">— ${detail}</span>` : ''}</span>`;
       ul.appendChild(li);
     }
@@ -533,31 +695,26 @@ async function loadLogs() {
 
 function setupAutoRefresh() {
   if (logTimer) clearInterval(logTimer);
-  logTimer = setInterval(() => {
-    if ($('auto-refresh').checked) loadLogs();
-  }, 5000);
+  logTimer = setInterval(() => { if ($('auto-refresh').checked) loadLogs(); }, 5000);
 }
 
 /* ---------- boot ---------- */
 
 async function init() {
-  // Check auth first
+  applyTheme(localStorage.getItem('theme') || 'dark');
+  document.querySelectorAll('.theme-btn').forEach((b) =>
+    b.addEventListener('click', () => applyTheme(b.dataset.themeValue)),
+  );
+
   const authenticated = await checkAuth();
-  
-  if (!authenticated) {
-    showLoginScreen();
-  } else {
-    hideLoginScreen();
-    await initializeApp();
-  }
-  
-  // Login form handler
+  if (!authenticated) showLoginScreen();
+  else { hideLoginScreen(); await initializeApp(); }
+
   $('login-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const username = $('login-username').value.trim();
     const password = $('login-password').value;
     const errorEl = $('login-error');
-    
     try {
       errorEl.classList.add('hidden');
       await login(username, password);
@@ -568,89 +725,83 @@ async function init() {
       errorEl.classList.remove('hidden');
     }
   });
-  
-  // Logout button
+
   $('logout-btn').addEventListener('click', logout);
 }
 
+let appInitialized = false;
 async function initializeApp() {
-  document.querySelectorAll('.tab').forEach((t) =>
-    t.addEventListener('click', () => switchTab(t.dataset.tab)),
-  );
+  if (!appInitialized) {
+    appInitialized = true;
 
-  $('preset').addEventListener('change', applyPreset);
-  $('interval-n').addEventListener('input', applyPreset);
-  $('daily-time').addEventListener('input', applyPreset);
-  $('user-search').addEventListener('input', renderUsers);
-  [
-    'enabled', 'cron', 'minDuration', 'maxDuration', 'minMembers', 'maxMembers', 'minActivities',
-    'maxActivities', 'activityType', 'activitiesEnabled', 'autoEnd', 'attachDojo',
-    'eventsEnabled', 'minEvents', 'maxEvents', 'eventIsEventRatio', 'eventDurationMinutes',
-    'eventFutureMinDays', 'eventFutureMaxDays', 'eventAttachPhoto', 'eventAttachDojo',
-    'eventTitles', 'eventDescriptions',
-  ].forEach((id) => {
-    $(id).addEventListener('input', refreshUi);
-    $(id).addEventListener('change', refreshUi);
-  });
-  $('select-all').addEventListener('click', () => {
-    allUsers.forEach((u) => selected.add(u.id));
-    renderUsers();
-    refreshUi();
-  });
-  $('clear-all').addEventListener('click', () => {
-    selected.clear();
-    renderUsers();
-    refreshUi();
-  });
-  $('save').addEventListener('click', save);
-  $('run-now').addEventListener('click', () =>
-    runNow(activeTab === 'events' ? 'events' : 'activities'),
-  );
+    document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => switchTab(t.dataset.tab)));
 
-  // notifications
-  $('notif-search').addEventListener('input', renderNotifUsers);
-  $('only-token').addEventListener('change', renderNotifUsers);
-  $('notif-title').addEventListener('input', refreshNotify);
-  $('notif-body').addEventListener('input', refreshNotify);
-  document.querySelectorAll('input[name="notif-mode"]').forEach((r) =>
-    r.addEventListener('change', refreshNotify),
-  );
-  $('notif-select-all').addEventListener('click', () => {
-    allUsers.filter((u) => u.hasToken).forEach((u) => notifSelected.add(u.id));
-    renderNotifUsers();
-    refreshNotify();
-  });
-  $('notif-clear-all').addEventListener('click', () => {
-    notifSelected.clear();
-    renderNotifUsers();
-    refreshNotify();
-  });
-  $('send-notif').addEventListener('click', sendNotification);
+    makeScheduler('act', 'activityCron');
+    makeScheduler('evt', 'eventsTrueCron');
+    makeScheduler('evf', 'eventsFalseCron');
+    setupListEditor('titles-editor');
+    setupListEditor('descs-editor');
 
-  // logs
-  $('log-filter').addEventListener('change', loadLogs);
-  $('refresh-logs').addEventListener('click', loadLogs);
+    $('user-search').addEventListener('input', renderUsers);
+    [
+      'activitiesEnabled', 'activityCron',
+      'eventsTrueEnabled', 'eventsTrueCron', 'eventsTrueMin', 'eventsTrueMax',
+      'eventsFalseEnabled', 'eventsFalseCron', 'eventsFalseMin', 'eventsFalseMax',
+      'minDuration', 'maxDuration', 'minMembers', 'maxMembers', 'minActivities', 'maxActivities',
+      'activityType', 'autoEnd', 'attachDojo',
+      'eventDurationMinutes', 'eventFutureMinDays', 'eventFutureMaxDays', 'eventAttachPhoto', 'eventAttachDojo',
+    ].forEach((id) => {
+      $(id).addEventListener('input', refreshUi);
+      $(id).addEventListener('change', refreshUi);
+    });
 
-  try {
-    await loadConfig();
-  } catch (err) {
-    banner(`Could not load config: ${err.message}`, 'error');
+    $('select-all').addEventListener('click', () => { allUsers.forEach((u) => selected.add(u.id)); renderUsers(); refreshUi(); });
+    $('clear-all').addEventListener('click', () => { selected.clear(); renderUsers(); refreshUi(); });
+    $('save').addEventListener('click', save);
+    $('run-now').addEventListener('click', () => runNow(activeTab === 'events' ? 'events' : 'activities'));
+
+    // environment manager
+    $('env-current-btn').addEventListener('click', (e) => { e.stopPropagation(); toggleEnvMenu(); });
+    $('env-add-toggle').addEventListener('click', () => {
+      $('env-add-form').classList.remove('hidden');
+      $('env-add-toggle').classList.add('hidden');
+      $('env-add-name').focus();
+    });
+    $('env-add-cancel').addEventListener('click', () => {
+      $('env-add-form').classList.add('hidden');
+      $('env-add-toggle').classList.remove('hidden');
+      $('env-add-err').classList.add('hidden');
+    });
+    $('env-add-form').addEventListener('submit', addEnv);
+    document.addEventListener('click', (e) => {
+      if (!$('env-picker').contains(e.target)) toggleEnvMenu(false);
+    });
+
+    // notifications
+    $('notif-search').addEventListener('input', renderNotifUsers);
+    $('only-token').addEventListener('change', renderNotifUsers);
+    $('notif-title').addEventListener('input', refreshNotify);
+    $('notif-body').addEventListener('input', refreshNotify);
+    document.querySelectorAll('input[name="notif-mode"]').forEach((r) => r.addEventListener('change', refreshNotify));
+    $('notif-select-all').addEventListener('click', () => { allUsers.filter((u) => u.hasToken).forEach((u) => notifSelected.add(u.id)); renderNotifUsers(); refreshNotify(); });
+    $('notif-clear-all').addEventListener('click', () => { notifSelected.clear(); renderNotifUsers(); refreshNotify(); });
+    $('send-notif').addEventListener('click', sendNotification);
+
+    // logs
+    $('log-filter').addEventListener('change', loadLogs);
+    $('log-env-only').addEventListener('change', loadLogs);
+    $('refresh-logs').addEventListener('click', loadLogs);
+
+    switchTab('activities');
+    setupAutoRefresh();
   }
 
   try {
-    allUsers = await api('/api/users');
-    renderUsers();
-    renderNotifUsers();
-    refreshUi();
-    refreshNotify();
+    await loadEnvironments();
   } catch (err) {
-    const msg = `⚠ Failed to load users: ${err.message}. Check STRAPI_API_URL / STRAPI_TOKEN on the server.`;
-    $('users').innerHTML = `<span class="loading err">${msg}</span>`;
-    $('notif-users').innerHTML = `<span class="loading err">${msg}</span>`;
+    banner(`Could not load environments: ${err.message}`, 'error');
   }
-
-  loadLogs();
-  setupAutoRefresh();
+  await loadEnvData();
 }
 
 init();

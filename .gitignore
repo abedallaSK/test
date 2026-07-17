@@ -1,8 +1,12 @@
-```
+# Dependencies
+node_modules/
+
 # Environment
 .env
+
+# Persisted state (contains Strapi tokens — never commit)
+data/
 
 # Logs
 *.log
 server.log
-```
