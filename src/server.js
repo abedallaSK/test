@@ -13,6 +13,7 @@ import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
+import multer from 'multer';
 
 import { getConfig, updateConfig, ACTIVITY_TYPES } from './config.js';
 import { getLogs, log } from './logger.js';
@@ -24,6 +25,12 @@ import { statePath } from './store.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
+
+// Configure multer for file uploads
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
+});
 
 // Bumped whenever server-side behaviour changes. Surfaced to the UI so you can
 // confirm the RUNNING process (not just static files) is the latest.
@@ -244,6 +251,55 @@ app.post('/api/upload-from-url', async (req, res) => {
     res.json({ id: fileId });
   } catch (err) {
     log('error', `Upload from URL failed: ${err.message}`);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** Upload files to Strapi media library. Returns array of file ids. */
+app.post('/api/upload', upload.array('files', 10), async (req, res) => {
+  try {
+    const env = resolveEnv(envIdFrom(req));
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: 'No files uploaded' });
+    }
+    
+    const uploadedIds = [];
+    for (const file of req.files) {
+      const form = new FormData();
+      const blob = new Blob([file.buffer], { type: file.mimetype });
+      form.append('files', blob, file.originalname);
+      
+      const start = Date.now();
+      const response = await fetch(`${env.apiBase}/upload`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${env.token}` },
+        body: form,
+      });
+      const ms = Date.now() - start;
+      const json = await response.json().catch(() => null);
+      
+      log(response.ok ? 'api' : 'error', `[${env.name}] POST /api/upload → ${response.status} (${ms}ms)`, {
+        api: true,
+        env: env.id,
+        envName: env.name,
+        method: 'POST',
+        path: '/api/upload',
+        status: response.status,
+        ms,
+      });
+      
+      if (!response.ok) {
+        throw new Error(`upload failed (${response.status}): ${json?.error?.message || ''}`);
+      }
+      
+      const id = Array.isArray(json) ? json[0]?.id : json?.id;
+      if (!id) throw new Error('upload returned no file id');
+      uploadedIds.push(id);
+    }
+    
+    res.json(uploadedIds.map(id => ({ id })));
+  } catch (err) {
+    log('error', `File upload failed: ${err.message}`);
     res.status(500).json({ error: err.message });
   }
 });
