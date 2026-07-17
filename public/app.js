@@ -336,6 +336,7 @@ async function sendNotification() {
 /* ========== What's New Tab ========== */
 
 let whatsNewEntries = [];
+let pendingMediaFiles = []; // Store files to be uploaded
 
 async function loadWhatsNewEntries() {
   try {
@@ -499,20 +500,45 @@ async function addWhatsNewEntry(applyToAll = false) {
     }
   };
   
-  // Handle image upload if URL provided
-  if (imageUrl) {
-    try {
-      const fileId = await api(withEnv('/api/upload-from-url'), {
-        method: 'POST',
-        body: JSON.stringify({ imageUrl, filename: 'whats-new.jpg' })
-      });
-      payload.data.image = fileId;
-    } catch (e) {
-      // If upload fails, continue without image
-    }
-  }
-  
   try {
+    // Upload media files first (if any)
+    let uploadedMediaIds = [];
+    if (pendingMediaFiles.length > 0) {
+      for (const file of pendingMediaFiles) {
+        const formData = new FormData();
+        formData.append('files', file);
+        
+        const response = await fetch(withEnv('/api/upload'), {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${authToken}` },
+          body: formData
+        });
+        
+        if (response.ok) {
+          const result = await response.json();
+          const fileId = Array.isArray(result) ? result[0]?.id : result?.id;
+          if (fileId) uploadedMediaIds.push(fileId);
+        }
+      }
+      
+      if (uploadedMediaIds.length > 0) {
+        payload.data.media = uploadedMediaIds;
+      }
+    }
+    
+    // Handle legacy image URL if provided and no files uploaded
+    if (imageUrl && uploadedMediaIds.length === 0) {
+      try {
+        const fileId = await api(withEnv('/api/upload-from-url'), {
+          method: 'POST',
+          body: JSON.stringify({ imageUrl, filename: 'whats-new.jpg' })
+        });
+        payload.data.image = fileId.id || fileId;
+      } catch (e) {
+        // If upload fails, continue without image
+      }
+    }
+    
     if (applyToAll) {
       const envs = await api('/api/environments');
       const results = [];
@@ -526,11 +552,14 @@ async function addWhatsNewEntry(applyToAll = false) {
       banner('✓ Entry added.', 'success');
     }
     
+    // Clear form
     $('wn-version').value = '';
     $('wn-title').value = '';
     $('wn-description').value = '';
     $('wn-image-url').value = '';
     $('wn-order').value = '0';
+    pendingMediaFiles = [];
+    renderMediaPreview();
     
     await loadWhatsNewEntries();
     loadLogs();

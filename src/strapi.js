@@ -175,3 +175,42 @@ export async function uploadImageFromUrl(env, imageUrl, filename = 'event.jpg') 
   if (!id) throw new Error('upload returned no file id');
   return id;
 }
+
+/**
+ * Fetch entries from any Strapi collection with populate options.
+ * @param {Object} env - Environment object
+ * @param {string} collection - Collection name (e.g., 'whats-new')
+ * @param {Object} options - Query options like { populate: '*', filters: {...} }
+ * @returns {Promise<Array>} Array of entries
+ */
+export async function fetchMediaLibrary(env, collection, options = {}) {
+  assertEnv(env);
+  
+  const params = new URLSearchParams();
+  if (options.populate) {
+    if (options.populate === '*') {
+      params.set('populate', '*');
+    } else if (typeof options.populate === 'object') {
+      // Handle nested populate for Strapi v5
+      const populateParam = JSON.stringify(options.populate);
+      params.set('populate', populateParam);
+    }
+  }
+  if (options.filters) {
+    params.set('filters', JSON.stringify(options.filters));
+  }
+  if (options.sort) {
+    params.set('sort', Array.isArray(options.sort) ? options.sort.join(',') : options.sort);
+  }
+  if (options.pagination) {
+    Object.entries(options.pagination).forEach(([key, value]) => {
+      params.set(`pagination[${key}]`, value);
+    });
+  }
+  
+  const queryString = params.toString();
+  const path = `/${collection}${queryString ? '?' + queryString : ''}`;
+  
+  const data = await request(env, 'GET', path);
+  return data?.data || data || [];
+}
