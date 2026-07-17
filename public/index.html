@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0d0f16" />
     <title>Activity Bot — Settings</title>
-    <link rel="stylesheet" href="styles.css?v=8" />
+    <link rel="stylesheet" href="styles.css?v=9" />
   </head>
   <body>
     <header class="topbar">
@@ -77,6 +77,7 @@
       <button type="button" class="tab active" data-tab="activities">🥋 <span>Activities</span></button>
       <button type="button" class="tab" data-tab="events">📅 <span>Events</span></button>
       <button type="button" class="tab" data-tab="notify">🔔 <span>Notifications</span></button>
+      <button type="button" class="tab" data-tab="whatsnew">📦 <span>What's New</span></button>
     </nav>
 
     <div id="banner" class="banner hidden"></div>
@@ -430,6 +431,115 @@
       </div>
     </main>
 
+    <!-- ============ WHAT'S NEW TAB ============ -->
+    <main id="panel-whatsnew" class="hidden">
+      <section class="card summary">
+        <div class="summary-grid">
+          <div class="stat"><span class="stat-label">Total Versions</span><span class="stat-value" id="wnsum-total">—</span></div>
+          <div class="stat"><span class="stat-label">Active Versions</span><span class="stat-value" id="wnsum-active">—</span></div>
+          <div class="stat"><span class="stat-label">Latest Version</span><span class="stat-value" id="wnsum-latest">—</span></div>
+          <div class="stat"><span class="stat-label">Platforms</span><span class="stat-value" id="wnsum-platforms">—</span></div>
+        </div>
+        <p class="dirty-note hidden" id="wn-dirty-note">● Unsaved changes — click <b>Save settings</b> to apply.</p>
+      </section>
+
+      <details class="card info">
+        <summary>ℹ️ How this works</summary>
+        <div class="info-body">
+          <p>Manage release notes and "What's New" entries for your app versions. Each entry includes:</p>
+          <ul>
+            <li><b>Version number</b> (e.g., 1.2.3) — required identifier.</li>
+            <li><b>Title & Description</b> — what's new in this version.</li>
+            <li><b>Platform</b> — target iOS, Android, or all platforms.</li>
+            <li><b>Image</b> — optional screenshot or icon.</li>
+            <li><b>Order</b> — controls display order (higher = first).</li>
+            <li><b>Active</b> — toggle visibility.</li>
+          </ul>
+          <p class="muted">Changes are applied to the selected <b>environment</b>. Use the "Apply to All Envs" button to sync across all environments.</p>
+        </div>
+      </details>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>➕ Add New Version Entry</h2>
+          <button type="button" id="wn-apply-all" class="secondary" title="Copy this entry to all environments">🌍 Apply to All Envs</button>
+        </div>
+        <div class="grid">
+          <label>Version *
+            <input type="text" id="wn-version" placeholder="e.g., 1.2.3" required />
+            <small>Unique version identifier.</small>
+          </label>
+          <label>Platform
+            <select id="wn-platform">
+              <option value="all">All Platforms</option>
+              <option value="ios">iOS Only</option>
+              <option value="android">Android Only</option>
+            </select>
+            <small>Target platform for this entry.</small>
+          </label>
+          <label>Order
+            <input type="number" id="wn-order" min="0" value="0" />
+            <small>Higher numbers appear first.</small>
+          </label>
+          <label class="switch" title="Show this entry">
+            <input type="checkbox" id="wn-active" checked /><span class="track"></span><span class="switch-label">Active</span>
+          </label>
+        </div>
+        <div class="grid" style="margin-top:16px">
+          <label>Title
+            <input type="text" id="wn-title" placeholder="What's new?" />
+            <small>Brief headline.</small>
+          </label>
+        </div>
+        <label style="margin-top:16px">Description
+          <textarea id="wn-description" rows="4" placeholder="Describe the changes..."></textarea>
+          <small>Detailed release notes.</small>
+        </label>
+        <label style="margin-top:16px">Image (URL)
+          <input type="text" id="wn-image-url" placeholder="https://example.com/image.png" />
+          <small>Optional image URL. Leave empty for no image.</small>
+        </label>
+        <div style="margin-top:16px; display:flex; gap:10px; flex-wrap:wrap">
+          <button type="button" id="wn-add-btn" class="primary">➕ Add Entry</button>
+          <button type="button" id="wn-clear-btn" class="ghost">Clear Form</button>
+        </div>
+        <p id="wn-form-error" class="error hidden"></p>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>📋 Version Entries</h2>
+          <div class="user-actions">
+            <input type="search" id="wn-search" placeholder="Search versions..." />
+            <label class="switch tiny">
+              <input type="checkbox" id="wn-filter-active" checked /><span class="track"></span><span class="switch-label">Active Only</span>
+            </label>
+            <button type="button" id="wn-refresh" class="ghost">Refresh</button>
+          </div>
+        </div>
+        <p class="hint">Entries for the current environment. Click delete to remove an entry.</p>
+        <div id="wn-list" class="wn-list"><span class="loading">Loading entries…</span></div>
+      </section>
+
+      <section class="card">
+        <h2>🌐 Bulk Operations</h2>
+        <p class="hint">Synchronize What's New entries across all configured environments.</p>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:10px">
+          <button type="button" id="wn-sync-all" class="secondary">🔄 Sync All Envs</button>
+          <button type="button" id="wn-export" class="ghost">📤 Export JSON</button>
+          <button type="button" id="wn-import-toggle" class="ghost">📥 Import JSON</button>
+        </div>
+        <div id="wn-import-area" class="hidden" style="margin-top:10px">
+          <textarea id="wn-import-data" rows="6" placeholder='Paste JSON array of entries here...' style="width:100%"></textarea>
+          <div style="margin-top:8px; display:flex; gap:8px">
+            <button type="button" id="wn-import-confirm" class="primary">Import</button>
+            <button type="button" id="wn-import-cancel" class="ghost">Cancel</button>
+          </div>
+          <p id="wn-import-error" class="error hidden"></p>
+        </div>
+      </section>
+    </main>
+
     <!-- Sticky action bar (activities + events tabs) -->
     <div class="actionbar hidden" id="activities-actionbar">
       <div class="actionbar-inner">
@@ -468,6 +578,6 @@
       </section>
     </main>
 
-    <script src="app.js?v=8"></script>
+    <script src="app.js?v=9"></script>
   </body>
 </html>

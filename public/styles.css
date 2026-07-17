@@ -504,3 +504,130 @@ button:hover { filter: brightness(1.08); }
 @media (max-width: 380px) {
   .theme-btn { padding: 6px 7px; }
 }
+
+/* ========== What's New Tab Styles ========== */
+.wn-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 500px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.wn-entry {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  padding: 14px;
+  background: var(--card2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.wn-entry:hover {
+  border-color: var(--accent-dim);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.wn-entry.inactive {
+  opacity: 0.6;
+  border-style: dashed;
+}
+
+.wn-entry-main {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wn-entry-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.wn-version-badge {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--card);
+  padding: 3px 9px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+.wn-platform-badge {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+.wn-platform-badge.all { background: var(--good); color: var(--good-ink); }
+.wn-platform-badge.ios { background: #3a4a5a; color: #fff; }
+.wn-platform-badge.android { background: #3a5a4a; color: #fff; }
+
+.wn-entry-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+
+.wn-entry-desc {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.wn-entry-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.wn-entry-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-end;
+}
+
+.wn-entry-actions button {
+  padding: 6px 10px;
+  font-size: 12px;
+  border-radius: 8px;
+}
+
+.wn-entry-image {
+  max-width: 120px;
+  max-height: 80px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  margin-top: 8px;
+  align-self: flex-start;
+}
+
+.wn-empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.wn-import-area {
+  background: var(--card2);
+  padding: 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}

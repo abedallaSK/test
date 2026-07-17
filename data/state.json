@@ -1,0 +1,58 @@
+{
+  "environments": [
+    {
+      "id": "default",
+      "name": "Default",
+      "url": "https://admin.dojospaces.com/api",
+      "token": "e6508c8e94f97f8e8835ebacdf5894c49b7ef99f2aa63a4763bb52659ebf5939d5b9cf9bb3602f995fc474721040de4631ac82fc76c4e887031d93d734faddffa7e0406e7ed6b8f3998e87da974a1dd0218db6543424dd68ae26eaa338a0c514fa84ee0c049e9a5ca2f4f86ce0bbb22aee7be9cbf1962b4ebbc84b38bb65002b"
+    }
+  ],
+  "configs": {
+    "default": {
+      "activitiesEnabled": false,
+      "activityCron": "*/30 * * * *",
+      "eventsTrueEnabled": false,
+      "eventsTrueCron": "0 */6 * * *",
+      "eventsTrueMin": 1,
+      "eventsTrueMax": 2,
+      "eventsFalseEnabled": false,
+      "eventsFalseCron": "0 */12 * * *",
+      "eventsFalseMin": 1,
+      "eventsFalseMax": 1,
+      "minDurationMinutes": 30,
+      "maxDurationMinutes": 60,
+      "minMembers": 1,
+      "maxMembers": 3,
+      "minActivities": 1,
+      "maxActivities": 1,
+      "activityType": "CUSTOM",
+      "autoEnd": true,
+      "attachDojo": true,
+      "eventFutureMinDays": 1,
+      "eventFutureMaxDays": 30,
+      "eventDurationMinutes": 120,
+      "eventAttachPhoto": true,
+      "eventAttachDojo": true,
+      "eventTitles": [
+        "Sunrise Yoga Session",
+        "Community Run",
+        "Meditation Meetup",
+        "Beach Workout",
+        "Evening Cycling",
+        "Group Hike",
+        "Martial Arts Class",
+        "Mindfulness Workshop",
+        "Street Basketball",
+        "Morning Stretch"
+      ],
+      "eventDescriptions": [
+        "Join us for a refreshing session open to all levels — bring water and good vibes!",
+        "Meet fellow members for a fun group activity in the heart of the city.",
+        "A relaxing gathering to recharge body and mind. Everyone is welcome.",
+        "Let's move together, stay healthy, and make new friends along the way.",
+        "A guided session designed for beginners and pros alike. See you there!"
+      ],
+      "selectedUserIds": []
+    }
+  }
+}

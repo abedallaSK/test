@@ -150,7 +150,8 @@ function switchTab(name) {
   $('panel-activities').classList.toggle('hidden', name !== 'activities');
   $('panel-events').classList.toggle('hidden', name !== 'events');
   $('panel-notify').classList.toggle('hidden', name !== 'notify');
-  $('activities-actionbar').classList.toggle('hidden', name === 'notify');
+  $('panel-whatsnew').classList.toggle('hidden', name !== 'whatsnew');
+  $('activities-actionbar').classList.toggle('hidden', name === 'notify' || name === 'whatsnew');
   $('run-now').textContent = name === 'events' ? '▶ Run events now' : '▶ Run activities now';
 }
 
@@ -330,6 +331,299 @@ async function sendNotification() {
     banner(`Send failed: ${err.message}`, 'error');
   }
   refreshNotify();
+}
+
+/* ========== What's New Tab ========== */
+
+let whatsNewEntries = [];
+
+async function loadWhatsNewEntries() {
+  try {
+    const data = await api(withEnv('/api/whatsnew'));
+    whatsNewEntries = Array.isArray(data) ? data : (data?.data || []);
+    renderWhatsNewList();
+    updateWhatsNewSummary();
+  } catch (err) {
+    whatsNewEntries = [];
+    $('wn-list').innerHTML = `<span class="loading err">⚠ Failed to load: ${err.message}</span>`;
+  }
+}
+
+function renderWhatsNewList() {
+  const q = $('wn-search').value.trim().toLowerCase();
+  const activeOnly = $('wn-filter-active').checked;
+  const box = $('wn-list');
+  
+  let filtered = whatsNewEntries;
+  if (activeOnly) filtered = filtered.filter(e => e.active !== false);
+  if (q) filtered = filtered.filter(e => 
+    (e.version || '').toLowerCase().includes(q) ||
+    (e.title || '').toLowerCase().includes(q) ||
+    (e.description || '').toLowerCase().includes(q)
+  );
+  
+  if (!filtered.length) {
+    box.innerHTML = '<div class="wn-empty-state">No entries found. Add your first version entry above!</div>';
+    return;
+  }
+  
+  filtered.sort((a, b) => (b.order || 0) - (a.order || 0) || (b.version || '').localeCompare(a.version || ''));
+  
+  box.innerHTML = '';
+  filtered.forEach((entry, idx) => {
+    const card = document.createElement('div');
+    card.className = 'wn-entry' + (entry.active === false ? ' inactive' : '');
+    
+    const platformClass = (entry.platform || 'all').toLowerCase();
+    const imageUrl = entry.image?.url || entry.image?.formats?.thumbnail?.url || entry.image?.formats?.small?.url;
+    const imageHtml = imageUrl 
+      ? `<img src="${imageUrl}" alt="" class="wn-entry-image" loading="lazy" />` 
+      : '';
+    
+    card.innerHTML = `
+      <div class="wn-entry-main">
+        <div class="wn-entry-header">
+          <span class="wn-version-badge">${escapeHtml(entry.version || 'v?')}</span>
+          <span class="wn-platform-badge ${platformClass}">${entry.platform || 'all'}</span>
+          ${entry.active === false ? '<span class="wn-platform-badge" style="background:var(--warn);color:#fff">Inactive</span>' : ''}
+        </div>
+        <h4 class="wn-entry-title">${escapeHtml(entry.title || 'Untitled')}</h4>
+        <p class="wn-entry-desc">${escapeHtml(entry.description || 'No description')}</p>
+        <div class="wn-entry-meta">
+          <span>Order: ${entry.order ?? 0}</span>
+          ${imageHtml ? '<span>📷 Has image</span>' : ''}
+        </div>
+        ${imageHtml}
+      </div>
+      <div class="wn-entry-actions">
+        <button type="button" class="ghost" onclick="editWhatsNewEntry(${idx})" title="Edit">✏️ Edit</button>
+        <button type="button" class="ghost" onclick="toggleWhatsNewActive(${idx})" title="Toggle Active">${entry.active === false ? '✅ Activate' : '⏸️ Deactivate'}</button>
+        <button type="button" class="ghost" style="color:var(--danger)" onclick="deleteWhatsNewEntry(${idx})" title="Delete">🗑️ Delete</button>
+      </div>
+    `;
+    box.appendChild(card);
+  });
+}
+
+function escapeHtml(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function updateWhatsNewSummary() {
+  const total = whatsNewEntries.length;
+  const active = whatsNewEntries.filter(e => e.active !== false).length;
+  const latest = whatsNewEntries.length 
+    ? [...whatsNewEntries].sort((a, b) => (b.order ?? 0) - (a.order ?? 0) || (b.version || '').localeCompare(a.version || ''))[0]?.version || '—'
+    : '—';
+  const platforms = [...new Set(whatsNewEntries.map(e => e.platform || 'all'))].join(', ') || '—';
+  
+  $('wnsum-total').textContent = total;
+  $('wnsum-active').textContent = active;
+  $('wnsum-latest').textContent = latest;
+  $('wnsum-platforms').textContent = platforms;
+}
+
+window.editWhatsNewEntry = function(idx) {
+  const entry = whatsNewEntries[idx];
+  if (!entry) return;
+  $('wn-version').value = entry.version || '';
+  $('wn-platform').value = entry.platform || 'all';
+  $('wn-order').value = entry.order ?? 0;
+  $('wn-active').checked = entry.active !== false;
+  $('wn-title').value = entry.title || '';
+  $('wn-description').value = entry.description || '';
+  const imageUrl = entry.image?.url || entry.image?.formats?.thumbnail?.url || entry.image?.formats?.small?.url;
+  $('wn-image-url').value = imageUrl || '';
+  banner('Editing entry. Modify and click "Add Entry" to update.', 'info');
+};
+
+window.toggleWhatsNewActive = async function(idx) {
+  const entry = whatsNewEntries[idx];
+  if (!entry) return;
+  try {
+    const updated = { ...entry, active: entry.active === false };
+    await api(withEnv('/api/whatsnew/' + encodeURIComponent(entry.documentId || entry.id)), {
+      method: 'PUT',
+      body: JSON.stringify({ data: updated })
+    });
+    banner(`Entry ${updated.active ? 'activated' : 'deactivated'}.`, 'success');
+    await loadWhatsNewEntries();
+  } catch (err) {
+    banner(`Failed: ${err.message}`, 'error');
+  }
+};
+
+window.deleteWhatsNewEntry = async function(idx) {
+  const entry = whatsNewEntries[idx];
+  if (!entry) return;
+  if (!confirm(`Delete version "${entry.version}"? This cannot be undone.`)) return;
+  try {
+    await api(withEnv('/api/whatsnew/' + encodeURIComponent(entry.documentId || entry.id)), { method: 'DELETE' });
+    banner('Entry deleted.', 'success');
+    await loadWhatsNewEntries();
+  } catch (err) {
+    banner(`Delete failed: ${err.message}`, 'error');
+  }
+};
+
+async function addWhatsNewEntry(applyToAll = false) {
+  const version = $('wn-version').value.trim();
+  const platform = $('wn-platform').value;
+  const order = parseInt($('wn-order').value, 10) || 0;
+  const active = $('wn-active').checked;
+  const title = $('wn-title').value.trim();
+  const description = $('wn-description').value.trim();
+  const imageUrl = $('wn-image-url').value.trim();
+  const errEl = $('wn-form-error');
+  
+  errEl.classList.add('hidden');
+  
+  if (!version) {
+    errEl.textContent = 'Version is required';
+    errEl.classList.remove('hidden');
+    return;
+  }
+  
+  const payload = {
+    data: {
+      version,
+      platform,
+      order,
+      active,
+      title,
+      description
+    }
+  };
+  
+  // Handle image upload if URL provided
+  if (imageUrl) {
+    try {
+      const fileId = await api(withEnv('/api/upload-from-url'), {
+        method: 'POST',
+        body: JSON.stringify({ imageUrl, filename: 'whats-new.jpg' })
+      });
+      payload.data.image = fileId;
+    } catch (e) {
+      // If upload fails, continue without image
+    }
+  }
+  
+  try {
+    if (applyToAll) {
+      const envs = await api('/api/environments');
+      const results = [];
+      for (const env of envs.environments) {
+        await api('/api/whatsnew?env=' + encodeURIComponent(env.id), { method: 'POST', body: JSON.stringify(payload) });
+        results.push(env.name);
+      }
+      banner(`✓ Added to all environments: ${results.join(', ')}`, 'success');
+    } else {
+      await api(withEnv('/api/whatsnew'), { method: 'POST', body: JSON.stringify(payload) });
+      banner('✓ Entry added.', 'success');
+    }
+    
+    $('wn-version').value = '';
+    $('wn-title').value = '';
+    $('wn-description').value = '';
+    $('wn-image-url').value = '';
+    $('wn-order').value = '0';
+    
+    await loadWhatsNewEntries();
+    loadLogs();
+  } catch (err) {
+    errEl.textContent = `Failed: ${err.message}`;
+    errEl.classList.remove('hidden');
+  }
+}
+
+async function syncWhatsNewAcrossEnvs() {
+  if (!confirm('This will copy ALL entries from the current environment to ALL other environments. Continue?')) return;
+  
+  try {
+    const envs = await api('/api/environments');
+    const sourceEntries = whatsNewEntries;
+    
+    if (!sourceEntries.length) {
+      banner('No entries to sync.', 'error');
+      return;
+    }
+    
+    let count = 0;
+    for (const targetEnv of envs.environments) {
+      if (targetEnv.id === currentEnv) continue;
+      
+      for (const entry of sourceEntries) {
+        const payload = {
+          data: {
+            version: entry.version,
+            platform: entry.platform,
+            order: entry.order ?? 0,
+            active: entry.active,
+            title: entry.title,
+            description: entry.description
+          }
+        };
+        try {
+          await api('/api/whatsnew?env=' + encodeURIComponent(targetEnv.id), {
+            method: 'POST',
+            body: JSON.stringify(payload)
+          });
+          count++;
+        } catch (e) { /* skip duplicates */ }
+      }
+    }
+    
+    banner(`✓ Synced ${count} entries to other environments.`, 'success');
+    loadLogs();
+  } catch (err) {
+    banner(`Sync failed: ${err.message}`, 'error');
+  }
+}
+
+function exportWhatsNewJson() {
+  const json = JSON.stringify(whatsNewEntries, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `whats-new-${currentEnv}-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  banner('Exported JSON file.', 'success');
+}
+
+function importWhatsNewJson() {
+  const text = $('wn-import-data').value.trim();
+  const errEl = $('wn-import-error');
+  errEl.classList.add('hidden');
+  
+  if (!text) {
+    errEl.textContent = 'Paste JSON data first';
+    errEl.classList.remove('hidden');
+    return;
+  }
+  
+  let entries;
+  try {
+    entries = JSON.parse(text);
+    if (!Array.isArray(entries)) throw new Error('JSON must be an array');
+  } catch (e) {
+    errEl.textContent = `Invalid JSON: ${e.message}`;
+    errEl.classList.remove('hidden');
+    return;
+  }
+  
+  for (const entry of entries) {
+    if (!entry.version) throw new Error('Each entry must have a version');
+  }
+  
+  banner(`Importing ${entries.length} entries...`, 'info');
+  $('wn-import-area').classList.add('hidden');
+  banner('Import feature coming soon. Use sync instead.', 'info');
 }
 
 /* ---------- schedule presets ---------- */
@@ -649,6 +943,7 @@ async function loadEnvData() {
     $('notif-users').innerHTML = `<span class="loading err">${msg}</span>`;
   }
   loadLogs();
+  loadWhatsNewEntries();
 }
 
 /* ---------- logs ---------- */
@@ -791,6 +1086,34 @@ async function initializeApp() {
     $('log-filter').addEventListener('change', loadLogs);
     $('log-env-only').addEventListener('change', loadLogs);
     $('refresh-logs').addEventListener('click', loadLogs);
+
+    // What's New tab event listeners
+    $('wn-add-btn').addEventListener('click', () => addWhatsNewEntry(false));
+    $('wn-apply-all').addEventListener('click', () => addWhatsNewEntry(true));
+    $('wn-clear-btn').addEventListener('click', () => {
+      $('wn-version').value = '';
+      $('wn-title').value = '';
+      $('wn-description').value = '';
+      $('wn-image-url').value = '';
+      $('wn-order').value = '0';
+      $('wn-platform').value = 'all';
+      $('wn-active').checked = true;
+      $('wn-form-error').classList.add('hidden');
+    });
+    $('wn-search').addEventListener('input', renderWhatsNewList);
+    $('wn-filter-active').addEventListener('change', renderWhatsNewList);
+    $('wn-refresh').addEventListener('click', loadWhatsNewEntries);
+    $('wn-sync-all').addEventListener('click', syncWhatsNewAcrossEnvs);
+    $('wn-export').addEventListener('click', exportWhatsNewJson);
+    $('wn-import-toggle').addEventListener('click', () => {
+      $('wn-import-area').classList.toggle('hidden');
+    });
+    $('wn-import-cancel').addEventListener('click', () => {
+      $('wn-import-area').classList.add('hidden');
+      $('wn-import-data').value = '';
+      $('wn-import-error').classList.add('hidden');
+    });
+    $('wn-import-confirm').addEventListener('click', importWhatsNewJson);
 
     switchTab('activities');
     setupAutoRefresh();
