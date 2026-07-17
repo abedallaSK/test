@@ -273,7 +273,7 @@ app.post('/api/whatsnew', async (req, res) => {
       data.image = fileId;
     }
     
-    const result = await fetch(`${env.apiBase}/whats-news`, {
+    const result = await fetch(`${env.apiBase}/whats-new`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${env.token}`,
@@ -303,7 +303,7 @@ app.put('/api/whatsnew/:documentId', async (req, res) => {
       data.image = fileId;
     }
     
-    const result = await fetch(`${env.apiBase}/whats-news/${documentId}`, {
+    const result = await fetch(`${env.apiBase}/whats-new/${documentId}`, {
       method: 'PUT',
       headers: {
         Authorization: `Bearer ${env.token}`,
@@ -326,7 +326,7 @@ app.delete('/api/whatsnew/:documentId', async (req, res) => {
     const env = resolveEnv(envIdFrom(req));
     const { documentId } = req.params;
     
-    await fetch(`${env.apiBase}/whats-news/${documentId}`, {
+    await fetch(`${env.apiBase}/whats-new/${documentId}`, {
       method: 'DELETE',
       headers: {
         Authorization: `Bearer ${env.token}`,
