@@ -495,7 +495,23 @@
           <textarea id="wn-description" rows="4" placeholder="Describe the changes..."></textarea>
           <small>Detailed release notes.</small>
         </label>
-        <label style="margin-top:16px">Image (URL)
+        
+        <!-- Enhanced Media Upload Section -->
+        <div style="margin-top:16px">
+          <label>Media (Images, Videos, GIFs)</label>
+          <div class="media-upload-area" id="wn-media-dropzone">
+            <input type="file" id="wn-media-file" accept="image/*,video/*,.gif" multiple style="display:none" />
+            <div class="dropzone-content">
+              <span class="dropzone-icon">📁</span>
+              <p><strong>Drag & drop</strong> media files here</p>
+              <p class="muted">or click to browse (PNG, JPG, GIF, MP4, WebM...)</p>
+            </div>
+            <div class="media-preview-grid" id="wn-media-preview"></div>
+          </div>
+          <small>Supports images, videos, and animated GIFs. Multiple files allowed.</small>
+        </div>
+        
+        <label style="margin-top:16px">Or Image URL (legacy)
           <input type="text" id="wn-image-url" placeholder="https://example.com/image.png" />
           <small>Optional image URL. Leave empty for no image.</small>
         </label>
@@ -517,7 +533,7 @@
             <button type="button" id="wn-refresh" class="ghost">Refresh</button>
           </div>
         </div>
-        <p class="hint">Entries for the current environment. Click delete to remove an entry.</p>
+        <p class="hint">Entries for the current environment. Drag to reorder by order value. Click delete to remove an entry.</p>
         <div id="wn-list" class="wn-list"><span class="loading">Loading entries…</span></div>
       </section>
 

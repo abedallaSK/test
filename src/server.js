@@ -17,7 +17,7 @@ import crypto from 'node:crypto';
 import { getConfig, updateConfig, ACTIVITY_TYPES } from './config.js';
 import { getLogs, log } from './logger.js';
 import { runOnce, reschedule } from './scheduler.js';
-import { getUsers, getDojos, getPushTargets } from './strapi.js';
+import { getUsers, getDojos, getPushTargets, uploadImageFromUrl, fetchMediaLibrary } from './strapi.js';
 import { sendExpoPush, isExpoPushToken } from './expo.js';
 import { listEnvironments, resolveEnv, defaultEnvId, addEnvironment, removeEnvironment } from './environments.js';
 import { statePath } from './store.js';
@@ -232,6 +232,113 @@ app.get('/api/logs', (req, res) => {
   const envId = req.query?.env;
   const logs = getLogs();
   res.json(envId ? logs.filter((e) => !e.env || e.env === envId) : logs);
+});
+
+/** Upload an image from URL to Strapi media library. Returns the file id. */
+app.post('/api/upload-from-url', async (req, res) => {
+  try {
+    const env = resolveEnv(envIdFrom(req));
+    const { imageUrl, filename } = req.body || {};
+    if (!imageUrl) return res.status(400).json({ error: 'imageUrl is required' });
+    const fileId = await uploadImageFromUrl(env, imageUrl, filename || 'upload.jpg');
+    res.json({ id: fileId });
+  } catch (err) {
+    log('error', `Upload from URL failed: ${err.message}`);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** Get all entries from What's New collection for the current environment. */
+app.get('/api/whatsnew', async (req, res) => {
+  try {
+    const env = resolveEnv(envIdFrom(req));
+    const data = await fetchMediaLibrary(env, 'whats-new', { populate: '*' });
+    res.json(data);
+  } catch (err) {
+    log('error', `Fetch whatsnew failed: ${err.message}`);
+    res.status(502).json({ error: err.message });
+  }
+});
+
+/** Create a new What's New entry. */
+app.post('/api/whatsnew', async (req, res) => {
+  try {
+    const env = resolveEnv(envIdFrom(req));
+    const { data } = req.body || {};
+    if (!data || !data.version) return res.status(400).json({ error: 'version is required' });
+    
+    // If image is provided as a URL string, upload it first
+    if (typeof data.image === 'string' && data.image.startsWith('http')) {
+      const fileId = await uploadImageFromUrl(env, data.image, 'whats-new.jpg');
+      data.image = fileId;
+    }
+    
+    const result = await fetch(`${env.apiBase}/whats-news`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${env.token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ data }),
+    }).then(r => r.json());
+    
+    log('api', `[${env.name}] POST /api/whatsnew → created`, { env: env.id, envName: env.name, version: data.version });
+    res.json(result);
+  } catch (err) {
+    log('error', `Create whatsnew failed: ${err.message}`);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** Update a What's New entry by documentId. */
+app.put('/api/whatsnew/:documentId', async (req, res) => {
+  try {
+    const env = resolveEnv(envIdFrom(req));
+    const { documentId } = req.params;
+    const { data } = req.body || {};
+    
+    // If image is provided as a URL string, upload it first
+    if (data && typeof data.image === 'string' && data.image.startsWith('http')) {
+      const fileId = await uploadImageFromUrl(env, data.image, 'whats-new.jpg');
+      data.image = fileId;
+    }
+    
+    const result = await fetch(`${env.apiBase}/whats-news/${documentId}`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${env.token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ data }),
+    }).then(r => r.json());
+    
+    log('api', `[${env.name}] PUT /api/whatsnew/${documentId} → updated`, { env: env.id, envName: env.name });
+    res.json(result);
+  } catch (err) {
+    log('error', `Update whatsnew failed: ${err.message}`);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** Delete a What's New entry by documentId. */
+app.delete('/api/whatsnew/:documentId', async (req, res) => {
+  try {
+    const env = resolveEnv(envIdFrom(req));
+    const { documentId } = req.params;
+    
+    await fetch(`${env.apiBase}/whats-news/${documentId}`, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${env.token}`,
+      },
+    });
+    
+    log('api', `[${env.name}] DELETE /api/whatsnew/${documentId} → deleted`, { env: env.id, envName: env.name });
+    res.json({ ok: true });
+  } catch (err) {
+    log('error', `Delete whatsnew failed: ${err.message}`);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.listen(PORT, () => {
