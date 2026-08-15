@@ -1,1 +1,16 @@
-Nothing needs to be added to .gitignore since only a source file (src/server.js) was modified and there are no build artifacts, dependencies, or temporary files in the changes.
+```
+# Dependencies
+node_modules/
+
+# Logs and temp files
+*.log
+*.tmp
+
+# Environment
+.env
+.env.local
+*.env.*
+
+# Package lock files
+package-lock.json
+```
